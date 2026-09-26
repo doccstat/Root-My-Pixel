@@ -469,6 +469,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private fun installKernelSu(payloads: VerifiedPayloads) {
         val ksudSource = payloads.kernelSu.absolutePath
         val ksudDest = "/data/local/tmp/ksud-pixel"
+        val koDest = "/data/local/tmp/kernelsu-payload.ko"
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
 
         // 1. Wait for daemon to be ready
@@ -498,29 +499,108 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             app.getString(R.string.error_ksu_stage, "stage failed after 5 attempts")
         }
 
-        // 3. Execute late-load via daemon root
-        appendLog("[*] Triggering KernelSU late-load (kmi=${payloads.kmi})...")
-        val lateResult = runHelper(helper, "-c",
-            "$ksudDest late-load --kmi ${payloads.kmi}")
-        if (lateResult.output.isNotBlank()) {
-            appendLog(lateResult.output.take(2000))
+        // 3. Materialise the KMI-matched kernelsu.ko that is embedded in ksud
+        // and load it with `insmod` rather than `late-load`.
+        //
+        // `late-load` also runs the module stage scripts in the same command
+        // (`run_stage("service")` and `boot-completed`), i.e. before the SECMARK
+        // repair in step 6. A module `service.sh` that restarts system_server
+        // (Vector does, when its bridge is missing) then redoes the netd
+        // handshake while the packet-label rules are still absent, and
+        // system_server spins in NetdService.get() until the watchdog reboots
+        // the phone. `insmod` loads exactly the same driver - the kernel marks
+        // any non-init loader with `ksu_late_loaded`, so the SELinux restore and
+        // the allowlist load are identical - and runs no script at all.
+        // Everything from here on goes through [rootCommand]: the driver load
+        // forces SELinux back to enforcing, which denies the exploit transport's
+        // socket, so KernelSU's su_compat (allowlist, loaded from disk) is the
+        // channel that survives. The helper is still the fallback.
+        appendLog("[*] Extracting ${payloads.kmi}_kernelsu.ko from ksud...")
+        val extractResult = rootCommand(helper,
+            "$ksudDest debug extract-binary ${payloads.kmi}_kernelsu.ko $koDest")
+        if (extractResult.code != 0) {
+            throw IllegalStateException(
+                app.getString(
+                    R.string.error_ksu_stage,
+                    "module extract failed: ${extractResult.output.take(200)}",
+                ),
+            )
+        }
+        appendLog(
+            "KernelSU module staged: " +
+                rootCommand(helper, "ls -la $koDest").output.trim().take(200),
+        )
+
+        appendLog("[*] Loading kernelsu.ko (kmi=${payloads.kmi})...")
+        val loadResult = rootCommand(helper, "$ksudDest insmod $koDest")
+        if (loadResult.output.isNotBlank()) {
+            appendLog(loadResult.output.take(2000))
         }
 
-        // 4. Verify the driver itself. KernelSU LKM mode does not create the
-        // legacy filesystem paths that were previously probed here.
-        verifyKernelSuLoaded(helper, ksudDest, lateResult)
+        // 4. Create the KernelSU userspace state: /data/adb/ksud plus the
+        // /data/adb/ksu/bin/* helpers that every module script is executed
+        // with. `late-load` did this implicitly; `insmod` does not.
+        appendLog("[*] Installing KernelSU userspace component...")
+        val installResult = rootCommand(helper, "$ksudDest install")
+        if (installResult.code != 0) {
+            appendLog(
+                "[!] ksud install reported ${installResult.code}: " +
+                    installResult.output.take(300),
+            )
+        }
 
-        // 5. Register only a known KernelSU production manager signature.
+        // 5. Repair packet labelling before anything else runs. The driver is
+        // now live and its SELinux hooks are active, but there are no SECMARK
+        // rules yet, so every packet keeps skb->secmark = unlabeled and is
+        // denied. netd's libnetd_updatable handshake aborts, system_server
+        // spins in NetdService.get() until the watchdog kills it, and the
+        // device reboots - which is what a root on Android 16 did before this
+        // reorder. Nothing slow (manager registration, APK install) may run
+        // ahead of this call.
+        applyNetworkFix(helper, ksudDest)
+
+        // 6. Write the repairs that KernelSU re-executes from disk on every
+        // userspace start, so they are still in place after any soft reboot and
+        // before the module scripts of that start run. Must precede the first
+        // stage trigger (step 10).
+        installDurableStageFixes(helper)
+
+        // 7. Verify the driver itself. KernelSU LKM mode does not create the
+        // legacy filesystem paths that were previously probed here.
+        verifyKernelSuLoaded(helper, ksudDest, loadResult)
+
+        // 8. Register only a known KernelSU production manager signature.
         // Package name alone is not a sufficient trust boundary for a root manager.
         registerManager(helper, ksudDest)
 
-        // 6. The driver is bound to the manager's signing certificate and speaks
+        // 9. The driver is bound to the manager's signing certificate and speaks
         // a versioned UAPI with it, so a separately installed manager can
         // diverge from the bundled ksud/.ko. Install the manager this build
         // ships whenever the device has a different (or no) one.
         installManagerIfNeeded(helper)
 
+        // 10. Run the post-fs-data stage (module post-fs-data, feature config,
+        // sepolicy rules, metamodule mount). The service stage is deliberately
+        // left to the emulated soft reboot: Vector's `vectord` must claim the
+        // `serial` service before system_server registers its own, and that
+        // window only exists inside `ksud soft-reboot`'s stop/start.
+        triggerPostFsData(helper, ksudDest)
+
         appendLog(app.getString(R.string.log_ksu_control_verified))
+    }
+
+    /**
+     * Runs the KernelSU post-fs-data stage once, after the durable repairs are
+     * on disk. Best-effort: a module script failing here must not fail the root.
+     */
+    private fun triggerPostFsData(helper: File, ksudDest: String) {
+        appendLog("[*] Running KernelSU post-fs-data stage...")
+        val result = rootCommand(helper, "$ksudDest post-fs-data")
+        appendLog(
+            if (result.code == 0) "[+] post-fs-data stage complete"
+            else "[!] post-fs-data stage reported ${result.code}: " +
+                result.output.trim().take(300),
+        )
     }
 
     private fun installManagerIfNeeded(helper: File) {
@@ -587,7 +667,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private fun verifyKernelSuLoaded(
         helper: File,
         ksudDest: String,
-        lateResult: CommandResult,
+        loadResult: CommandResult,
     ) {
         var nativeStatus = NativeProbe.KernelSuStatus()
         var debugResult = CommandResult(-1, "not attempted")
@@ -595,7 +675,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
         for (attempt in 1..10) {
             // su_compat proves both the driver and this app's grant, and it is
-            // the only channel left once late-load restores SELinux enforcing
+            // the only channel left once the driver load restores SELinux
+            // enforcing
             // (the exploit transport's socket is then denied).
             if (KernelSuPresence.rootShellViaKernelSu()) {
                 appendLog("[+] KernelSU verified through su_compat (attempt $attempt)")
@@ -638,8 +719,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val diagnostics = buildString {
-            append("late-load output: ")
-            append(lateResult.output.ifBlank { "<empty>" }.take(300))
+            append("driver load output: ")
+            append(loadResult.output.ifBlank { "<empty>" }.take(300))
             append("; native probe: present=${nativeStatus.driverPresent}, ")
             append("responsive=${nativeStatus.driverResponsive}, version=${nativeStatus.version}")
             append("; ksud debug (${debugResult.code}): ")
@@ -648,7 +729,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             append(moduleResult.output.ifBlank { "<empty>" }.take(200))
         }
         throw IllegalStateException(
-            app.getString(R.string.error_ksu_verify, lateResult.code, diagnostics),
+            app.getString(R.string.error_ksu_verify, loadResult.code, diagnostics),
         )
     }
 
@@ -758,7 +839,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
     /**
      * Runs a command through the best available root channel: KernelSU's su first,
-     * then the exploit transport. Once late-load has restored SELinux to
+     * then the exploit transport. Once the driver load has restored SELinux to
      * enforcing the exploit socket is no longer writable, so the helper must not
      * be the only channel.
      */
@@ -774,11 +855,10 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     private fun postRootMaintenance() {
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
 
-        val netfix = AssetScriptRunner.run(app, "netfix.sh", helper = helper, timeoutSeconds = 60L)
-        appendLog(
-            if (netfix.output.contains("RMP_NETFIX_OK")) "[+] Network packet labelling repaired"
-            else "[!] Network packet repair failed: ${netfix.output.trim().take(200)}",
-        )
+        // Usually already applied right after the driver load (see
+        // installKernelSu); re-running is harmless and covers installs that
+        // reused a live driver.
+        applyNetworkFix(helper)
 
         val otaBlock = rootCommand(helper, OtaGuard.blockCommand())
         appendLog(
@@ -805,6 +885,81 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 appendLog("[!] Restore failed: $pkg ($reason)")
             }
         }
+    }
+
+    /**
+     * Patches the live SELinux policy so packet labelling works again.
+     *
+     * Called as soon as the KernelSU driver is loaded - and again at the end of
+     * an install - because the window between the two is exactly when netd and
+     * system_server die without it.
+     */
+    private fun applyNetworkFix(helper: File, ksudOverride: String? = null): Boolean {
+        val env = ksudOverride?.let { mapOf("KSUD" to it) } ?: emptyMap()
+        val netfix = AssetScriptRunner.run(
+            app,
+            "netfix.sh",
+            env = env,
+            helper = helper,
+            timeoutSeconds = 60L,
+        )
+        val ok = netfix.output.contains("RMP_NETFIX_OK")
+        appendLog(
+            if (ok) "[+] Network packet labelling repaired"
+            else "[!] Network packet repair failed: ${netfix.output.trim().take(200)}",
+        )
+        return ok
+    }
+
+    /**
+     * Installs the repairs that KernelSU re-executes from disk on every
+     * userspace start.
+     *
+     * KernelSU runs the module stage scripts again on every emulated soft
+     * reboot (`ksud soft-reboot` -> on_post_data_fs -> on_services) and on any
+     * other post-fs-data/service event, so a repair the app only performs while
+     * it is running is missing exactly when it is needed:
+     *
+     *  - `netfix.sh` is copied to both `/data/adb/post-fs-data.d` and
+     *    `/data/adb/service.d`. Common `.d` scripts run before the modules' own
+     *    scripts in each stage, so the SECMARK rules are back before another
+     *    module `service.sh` can restart system_server and redo the netd
+     *    handshake.
+     *  - `module_compat.sh` makes NeoZygisk's post-fs-data idempotent (its
+     *    unconditional wipe unlinked a live daemon's socket, after which no
+     *    Zygisk module ever loaded) and gives Vector's `service.sh` an
+     *    `unshare` that understands `--propagation`.
+     *
+     * Everything under `/data/adb` is removed by the Unroot path.
+     */
+    private fun installDurableStageFixes(helper: File) {
+        val netfix = AssetScriptRunner.stage(app, "netfix.sh").absolutePath
+        val installCommand = buildString {
+            append("mkdir -p /data/adb/post-fs-data.d /data/adb/service.d && ")
+            append("cp -f '$netfix' /data/adb/post-fs-data.d/$NETFIX_STAGE_NAME && ")
+            append("cp -f '$netfix' /data/adb/service.d/$NETFIX_STAGE_NAME && ")
+            append("chmod 755 /data/adb/post-fs-data.d/$NETFIX_STAGE_NAME ")
+            append("/data/adb/service.d/$NETFIX_STAGE_NAME && echo RMP_STAGE_FIX_OK")
+        }
+        val result = rootCommand(helper, installCommand)
+        appendLog(
+            if (result.output.contains("RMP_STAGE_FIX_OK")) {
+                "[+] Network repair re-applied on every userspace start"
+            } else {
+                "[!] Durable network repair incomplete: ${result.output.trim().take(200)}"
+            },
+        )
+
+        val compat = AssetScriptRunner.run(
+            app,
+            "module_compat.sh",
+            helper = helper,
+            timeoutSeconds = 60L,
+        )
+        compat.output.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("RMP_COMPAT_OK:") || it.startsWith("RMP_COMPAT_FAIL:") }
+            .forEach { appendLog("[*] $it") }
     }
 
     private fun rootCommand(helper: File, command: String): CommandResult {
@@ -1134,13 +1289,29 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Emulated soft reboot - the same userspace restart the KernelSU manager
+     * and the GhostLock flow use on the Galaxy reference device.
+     *
+     * This is deliberately `ksud soft-reboot` and not a bare `killall
+     * system_server`: the emulation stops and starts the init services and runs
+     * the post-fs-data and service stages itself, which is the only moment a
+     * Zygisk module's `service.sh` runs while `system_server` is still down.
+     * Vector's `vectord` needs exactly that window to claim the `serial`
+     * service before the framework registers its own. A bare `system_server`
+     * kill never ran `service.sh`, so Vector stayed enabled but never loaded.
+     *
+     * The repairs are re-applied first (and rewritten to disk) so the restart
+     * can never land in the broken-netd window.
+     */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
             if (!helper.exists()) return@launch
-            val result = runHelper(helper, "-c",
-                "killall -9 system_server 2>/dev/null; true")
-            appendLog("[*] Soft reboot triggered (exit ${result.code})")
+            applyNetworkFix(helper)
+            installDurableStageFixes(helper)
+            val result = rootCommand(helper, "$KSUD_PATH soft-reboot")
+            appendLog("[*] Emulated soft reboot requested (exit ${result.code})")
         }
     }
 
@@ -1182,6 +1353,12 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
         private const val ROOT_ID_COMMAND = "id -u"
         private const val KERNEL_SU_PATH = "/system/bin/su"
+
+        /** KernelSU's on-disk userspace binary, created by `ksud install`. */
+        private const val KSUD_PATH = "/data/adb/ksud"
+
+        /** Common stage script that re-applies the SELinux SECMARK repair. */
+        private const val NETFIX_STAGE_NAME = "00-rmp-netfix.sh"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"

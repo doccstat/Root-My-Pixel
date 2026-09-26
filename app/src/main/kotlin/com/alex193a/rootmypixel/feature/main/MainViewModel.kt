@@ -26,6 +26,7 @@ import com.alex193a.rootmypixel.utils.AppBackupRunner
 import com.alex193a.rootmypixel.utils.AppBackupStore
 import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
+import com.alex193a.rootmypixel.utils.RootShell
 import com.alex193a.rootmypixel.utils.RootShellProbe
 import com.alex193a.rootmypixel.utils.TempRootCleanup
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
@@ -246,23 +247,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Emulated soft reboot (`ksud soft-reboot`), not a bare `killall
+     * system_server`. The emulation runs the post-fs-data and service stages
+     * itself, which is the only window where a Zygisk module's `service.sh`
+     * starts while `system_server` is down - required for Vector's `vectord` to
+     * claim the `serial` service.
+     */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
             if (!helper.exists()) return@launch
 
-            try {
-                val result = runCatching {
-                    val process = ProcessBuilder(
-                        helper.absolutePath, "-c",
-                        "killall -9 system_server 2>/dev/null; true"
-                    ).redirectErrorStream(true).start()
-                    process.inputStream.bufferedReader().use { it.readText() }
-                    process.waitFor()
-                }
-                val output = result.getOrDefault("daemon unreachable")
-                android.util.Log.i("RootMyPixel", "[softReboot] $output")
-            } catch (_: Exception) { }
+            val result = runCatching {
+                RootShell.run(
+                    "/data/adb/ksud soft-reboot",
+                    helper = helper,
+                    timeoutSeconds = 30L,
+                )
+            }.getOrNull()
+            android.util.Log.i("RootMyPixel", "[softReboot] ${result?.output ?: "unavailable"}")
         }
     }
 
