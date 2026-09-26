@@ -12,11 +12,22 @@
 #   node    sendto/recvfrom - address-based checks   (netd, imsstack_app)
 #
 # The `node` denial is the dangerous one: netd's libnetd_updatable_init opens a
-# loopback socket, gets the sendto denial, reports
-# "libnetd_updatable_init: Failed: connect: Connection refused" and aborts.
-# init has an `onrestart` rule that SIGKILLs zygote whenever netd restarts, so a
-# netd crash-loop turns into a zygote/system_server boot loop, and the device
-# only recovers with a full reboot.
+# loopback socket, the connect is denied and it reports
+# "libnetd_updatable_init: Failed: connect: Connection refused".
+#
+# Measured on yogi (CD1A.260618.001.C3) from the 2026-09-26 boot loop: netd
+# itself stays up and starts once. system_server does not fail fast - its main
+# thread blocks in SystemServer.startOtherServices ->
+# NetworkManagementService.create -> NetdService.get(), which sleeps and retries
+# forever. The system_server watchdog then kills and restarts it, bootanimation
+# never stops, and the phone only recovers with a reboot. All seven ANRs from
+# that loop are this one stack. init's netd `onrestart` is NOT the mechanism
+# here: it runs `restart zygote_secondary`, which fails with "service
+# zygote_secondary not found" on this build.
+#
+# The trigger is any zygote soft-restart - the KernelSU manager's restart, or
+# installing a Zygisk module - because it re-runs SystemServer bring-up and
+# therefore redoes the netd handshake. Apply these rules before any soft restart.
 #
 # These are live, in-memory policy patches: they disappear on the next reboot and
 # touch no file, so stock behaviour is restored automatically. Apply every rule
