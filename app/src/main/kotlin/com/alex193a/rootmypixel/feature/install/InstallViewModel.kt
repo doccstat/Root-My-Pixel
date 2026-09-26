@@ -589,6 +589,14 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         var moduleResult = CommandResult(-1, "not attempted")
 
         for (attempt in 1..10) {
+            // su_compat proves both the driver and this app's grant, and it is
+            // the only channel left once late-load restores SELinux enforcing
+            // (the exploit transport's socket is then denied).
+            if (KernelSuPresence.rootShellViaKernelSu()) {
+                appendLog("[+] KernelSU verified through su_compat (attempt $attempt)")
+                return
+            }
+
             nativeStatus = NativeProbe.kernelSuStatus()
             if (nativeStatus.isActive) {
                 appendLog(
@@ -599,7 +607,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 return
             }
 
-            debugResult = runHelper(helper, "-c", "$ksudDest debug info")
+            debugResult = rootCommand(helper, "$ksudDest debug info")
             if (debugResult.code == 0 &&
                 KernelSuInstallChecks.debugInfoShowsActiveKernelSu(debugResult.output)
             ) {
@@ -610,7 +618,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 return
             }
 
-            moduleResult = runHelper(helper, "-c", "grep '^kernelsu ' /proc/modules")
+            moduleResult = rootCommand(helper, "grep '^kernelsu ' /proc/modules")
             if (moduleResult.code == 0 &&
                 KernelSuInstallChecks.procModulesShowsActiveKernelSu(moduleResult.output)
             ) {
@@ -653,9 +661,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         }
 
         appendLog("[*] Verifying the installed KernelSU manager signature...")
-        val signatureResult = runHelper(
+        val signatureResult = rootCommand(
             helper,
-            "-c",
             "$ksudDest debug get-sign ${shellQuote(apkPath)}",
         )
         if (signatureResult.code != 0) {
@@ -678,16 +685,15 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         // Upstream KernelSU bakes the official manager signature into the
         // module, so the kernel trusts it without runtime registration.
         // KernelSU/SukiSU forks additionally expose `kernel dynamic-manager`.
-        val probeResult = runHelper(helper, "-c", "$ksudDest kernel dynamic-manager get")
+        val probeResult = rootCommand(helper, "$ksudDest kernel dynamic-manager get")
         if (probeResult.code != 0) {
             appendLog("[+] Official KernelSU manager signature is trusted by the module")
             return
         }
 
         appendLog("[*] Registering the KernelSU manager with the module...")
-        val setResult = runHelper(
+        val setResult = rootCommand(
             helper,
-            "-c",
             "$ksudDest kernel dynamic-manager set ${signature.size} ${signature.hash}",
         )
         if (setResult.code != 0) {
@@ -698,7 +704,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             return
         }
 
-        val getResult = runHelper(helper, "-c", "$ksudDest kernel dynamic-manager get")
+        val getResult = rootCommand(helper, "$ksudDest kernel dynamic-manager get")
         val registeredSignature = if (getResult.code == 0) {
             KernelSuInstallChecks.parseManagerSignature(getResult.output)
         } else {
@@ -743,6 +749,17 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             Thread.sleep(1500)
         }
         return CommandResult(1, "runHelper: exhausted retries")
+    }
+
+    /**
+     * Runs a command through the best available root channel: KernelSU's su first,
+     * then the exploit transport. Once late-load has restored SELinux to
+     * enforcing the exploit socket is no longer writable, so the helper must not
+     * be the only channel.
+     */
+    private fun rootCommand(helper: File, command: String): CommandResult {
+        val result = RootShell.run(command, helper = helper)
+        return CommandResult(result.code, result.output)
     }
 
     fun refreshUnrootAvailability() {
