@@ -1,0 +1,236 @@
+{
+  "profiles": [
+    {
+      "profileId": "mustang-CP2A.260705.006",
+      "codename": "mustang",
+      "kernelRelease": "6.6.118-android15-8",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/mustang-CP2A.260705.006.so",
+      "kmi": "android15-6.6"
+    },
+    {
+      "profileId": "frankel-CP2A.260705.006",
+      "codename": "frankel",
+      "kernelRelease": "6.6.118-android15-8",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/frankel-CP2A.260705.006.so",
+      "kmi": "android15-6.6"
+    },
+    {
+      "profileId": "rango-CP2A.260705.006",
+      "codename": "rango",
+      "kernelRelease": "6.6.118-android15-8",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/rango-CP2A.260705.006.so",
+      "kmi": "android15-6.6"
+    },
+    {
+      "profileId": "blazer-CP2A.260705.006",
+      "codename": "blazer",
+      "kernelRelease": "6.6.118-android15-8",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/blazer-CP2A.260705.006.so",
+      "kmi": "android15-6.6"
+    },
+    {
+      "profileId": "lynx-CP2A.260705.006",
+      "codename": "lynx",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/lynx-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "panther-CP2A.260705.006",
+      "codename": "panther",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/panther-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "panther-BP2A.250705.008",
+      "codename": "panther",
+      "kernelRelease": "6.1.124-android14-11",
+      "buildDisplay": "BP2A.250705.008",
+      "exploitAsset": "exploits/panther-BP2A.250705.008.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "husky-CP2A.260705.006",
+      "codename": "husky",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/husky-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "shiba-CP2A.260705.006",
+      "codename": "shiba",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/shiba-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "cheetah-CP2A.260705.006",
+      "codename": "cheetah",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/cheetah-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "comet-CP2A.260705.006",
+      "codename": "comet",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/comet-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tegu-CP2A.260705.006",
+      "codename": "tegu",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/tegu-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "caiman-CP2A.260705.006",
+      "codename": "caiman",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/caiman-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "bluejay-CP1A.260405.005.so",
+      "codename": "bluejay",
+      "kernelRelease": "6.1.145-android14-11",
+      "buildDisplay": "CP1A.260405.005",
+      "exploitAsset": "exploits/bluejay-CP1A.260405.005.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "bluejay-CP2A.260705.006",
+      "codename": "bluejay",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/bluejay-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "oriole-CP2A.260705.006",
+      "codename": "oriole",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/oriole-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "raven-CP2A.260705.006",
+      "codename": "raven",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/raven-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "akita-CP2A.260805.005",
+      "codename": "akita",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260805.005",
+      "exploitAsset": "exploits/akita-CP2A.260805.005.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tokay-CP2A.260705.006",
+      "codename": "tokay",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/tokay-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "komodo-CP2A.260705.006",
+      "codename": "komodo",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/komodo-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "stallion-CP2A.260805.005",
+      "codename": "stallion",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260805.005",
+      "exploitAsset": "exploits/stallion-CP2A.260805.005.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tangorpro-BP1A.250405.007",
+      "codename": "tangorpro",
+      "kernelRelease": "6.1.99-android14-11",
+      "buildDisplay": "BP1A.250405.007",
+      "exploitAsset": "exploits/tangorpro-BP1A.250405.007.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tangorpro-CP2A.260705.006",
+      "codename": "tangorpro",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260705.006",
+      "exploitAsset": "exploits/tangorpro-CP2A.260705.006.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "felix-CP2A.260605.012",
+      "codename": "felix",
+      "kernelRelease": "6.1.157-android14-11",
+      "buildDisplay": "CP2A.260605.012",
+      "exploitAsset": "exploits/felix-CP2A.260605.012.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "tokay-AD1A.240905.004",
+      "codename": "tokay",
+      "kernelRelease": "6.1.75-android14-11",
+      "buildDisplay": "AD1A.240905.004",
+      "exploitAsset": "exploits/tokay-AD1A.240905.004.so",
+      "kmi": "android14-6.1"
+    },
+    {
+      "profileId": "grizzly-CD1A.260618.001.C2",
+      "codename": "grizzly",
+      "kernelRelease": "6.12.69-android16-6",
+      "buildDisplay": "CD1A.260618.001.C2",
+      "exploitAsset": "exploits/grizzly-CD1A.260618.001.C2.so",
+      "kmi": "android16-6.12"
+    },
+    {
+      "profileId": "cubs-CD1A.260618.001.C2",
+      "codename": "cubs",
+      "kernelRelease": "6.12.69-android16-6",
+      "buildDisplay": "CD1A.260618.001.C2",
+      "exploitAsset": "exploits/cubs-CD1A.260618.001.C2.so",
+      "kmi": "android16-6.12"
+    },
+    {
+      "profileId": "kodiak-CD1A.260618.001.C2",
+      "codename": "kodiak",
+      "kernelRelease": "6.12.69-android16-6",
+      "buildDisplay": "CD1A.260618.001.C2",
+      "exploitAsset": "exploits/kodiak-CD1A.260618.001.C2.so",
+      "kmi": "android16-6.12"
+    },
+    {
+      "profileId": "yogi-CD1A.260618.001.C3",
+      "codename": "yogi",
+      "kernelRelease": "6.12.69-android16-6",
+      "buildDisplay": "CD1A.260618.001.C3",
+      "exploitAsset": "exploits/yogi-CD1A.260618.001.C3.so",
+      "kmi": "android16-6.12"
+    }
+  ]
+}

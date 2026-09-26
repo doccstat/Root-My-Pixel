@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Main screen -->
+    <string name="app_subtitle">Ispirato da Root My Galaxy</string>
+    <string name="status_checking">Verifica compatibilità dispositivo…</string>
+    <string name="status_not_installed">Dispositivo supportato — pronto per l\'installazione</string>
+    <string name="status_support_failed">Dispositivo non supportato</string>
+    <string name="status_ksu_active">ReSukiSU è attivo</string>
+    <string name="shikuzu_shell_active">Shizuku connesso e attivo</string>
+    <string name="shikuzu_shell_not_active">Shizuku non connesso — l\'exploit fallirà</string>
+    <string name="developed_by">SVILUPPATO DA</string>
+    <string name="missing_manager_title">ReSukiSU Manager non è installato</string>
+    <string name="missing_manager_description">È necessario ReSukiSU Manager per gestire i permessi di root</string>
+
+    <!-- Actions -->
+    <string name="action_install">Installa ReSukiSU</string>
+    <string name="action_reinstall">Reinstalla ReSukiSU</string>
+    <string name="action_unroot">Rimuovi Root e Riavvia</string>
+    <string name="action_retry">Riprova</string>
+    <string name="action_close">Chiudi</string>
+    <string name="action_done">Fatto</string>
+    <string name="action_soft_reboot">Soft Reboot (Userspace)</string>
+    <string name="action_export_log">Esporta exploit.log</string>
+    <string name="action_copy_log">Copia log</string>
+    <string name="action_confirm_unroot">Rimuovi e Riavvia</string>
+    <string name="action_cancel">Annulla</string>
+    <string name="unroot_dialog_title">Rimuovere i permessi di root?</string>
+    <string name="unroot_dialog_message">Questa azione eliminerà tutti i file temporanei dell\'exploit, le configurazioni di KernelSU (/data/adb) e riavvierà il dispositivo per ripristinare completamente lo stato stock.</string>
+    <string name="unroot_root_access_required">Concedi i permessi root a Root My Pixel in ReSukiSU Manager oppure ripeti l’installazione per ripristinare la shell root temporanea.</string>
+    <string name="status_unrooting">Rimozione root e riavvio in corso…</string>
+    <string name="status_unroot_incomplete">Pulizia incompleta — in attesa di una decisione</string>
+    <string name="unroot_incomplete_title">Alcuni elementi non sono stati rimossi</string>
+    <string name="unroot_incomplete_message">Non è stato possibile completare queste operazioni:</string>
+    <string name="unroot_temporary_root_reboot_note">Puoi comunque riavviare in sicurezza. I permessi di root scompariranno dopo il riavvio perché questo exploit fornisce solo un root temporaneo; gli elementi elencati sopra potrebbero rimanere nella memoria del dispositivo.</string>
+    <string name="action_reboot_anyway">Riavvia comunque</string>
+    <string name="action_do_not_reboot">Non riavviare</string>
+    <string name="unroot_issue_root_transport">Accesso privilegiato per la pulizia non disponibile</string>
+    <string name="unroot_issue_data_adb">Dati KernelSU (/data/adb)</string>
+    <string name="unroot_issue_apex_mount">Mount temporaneo Virt APEX</string>
+    <string name="unroot_issue_selinux">Modalità enforcing di SELinux</string>
+    <string name="unroot_issue_cve_app">Payload dell’exploit</string>
+    <string name="unroot_issue_cve_root">Helper root</string>
+    <string name="unroot_issue_ksud">Loader ReSukiSU</string>
+    <string name="unroot_issue_exploit_logs">Log temporanei dell’exploit</string>
+    <string name="unroot_issue_root_transport_files">Client e socket root temporanei</string>
+    <string name="unroot_issue_reboot">Richiesta di riavvio del sistema</string>
+    <string name="unroot_issue_unknown">Impossibile verificare lo stato della pulizia</string>
+    <string name="copied_to_clipboard">Log copiato negli appunti</string>
+
+    <!-- Install screen -->
+    <string name="install_title">Installa ReSukiSU</string>
+    <string name="install_keep_open">Mantieni l\'app aperta durante l\'installazione</string>
+    <string name="install_live_progress">Avanzamento in tempo reale</string>
+    <string name="install_preparing">Preparazione in corso…</string>
+
+    <!-- Phases -->
+    <string name="phase_checking">Verifica dei dispositivi supportati…</string>
+    <string name="phase_ready">Pronto per l\'installazione</string>
+    <string name="phase_downloading">Download del payload…</string>
+    <string name="phase_exploiting">Esecuzione dell\'exploit…</string>
+    <string name="phase_loading_ksu">Caricamento del modulo ReSukiSU…</string>
+    <string name="phase_installed">Installazione completata</string>
+    <string name="phase_failed">Installazione non riuscita</string>
+
+    <!-- Status messages -->
+    <string name="status_downloading">Estrazione dei payload dall\'APK…</string>
+    <string name="status_exploit">Esecuzione dell\'exploit kernel…</string>
+    <string name="status_loading_ksu">Caricamento del modulo ReSukiSU…</string>
+    <string name="status_install_failed">Installazione non riuscita</string>
+
+    <!-- Steps -->
+    <string name="step_support_title">Verifica supporto</string>
+    <string name="step_support_detail">Verifica la compatibilità del dispositivo</string>
+    <string name="step_download_title">Estrazione payload</string>
+    <string name="step_download_detail">Estrazione dei binari dell\'exploit e di ReSukiSU inclusi</string>
+    <string name="step_exploit_title">Esecuzione exploit</string>
+    <string name="step_exploit_detail">Ottieni l\'accesso root temporaneo</string>
+    <string name="step_ksu_title">Caricamento ReSukiSU</string>
+    <string name="step_ksu_detail">Installazione del modulo kernel ReSukiSU</string>
+
+    <!-- Log messages -->
+    <string name="log_profile">Profilo corrispondente: %1$s</string>
+    <string name="log_download_verified">Payload estratti con successo</string>
+    <string name="log_bootstrap_root">Bootstrap di root completato</string>
+    <string name="log_ksu_staged">Binario ReSukiSU preparato</string>
+    <string name="log_ksu_control_verified">Interfaccia di controllo ReSukiSU verificata</string>
+    <string name="log_install_complete">Installazione completata — ReSukiSU è attivo</string>
+
+    <!-- Errors -->
+    <string name="error_helper_unavailable">Helper nativo non disponibile</string>
+    <string name="error_exploit_stalled">Exploit bloccato — nessun progresso</string>
+    <string name="error_exploit_timeout">Tempo limite per l\'exploit scaduto</string>
+    <string name="error_payload_exit">L\'exploit è uscito con codice %1$d%2$s</string>
+    <string name="error_success_marker">L\'exploit non ha segnalato il successo</string>
+    <string name="error_route_disabled">Questa versione del payload non supporta ancora in sicurezza il kernel 5.10 del dispositivo. Non è stato eseguito alcun tentativo kernel e riprovare lo stesso payload non cambierà il risultato.</string>
+    <string name="error_ksu_stage">Impossibile preparare ksud: %1$s</string>
+    <string name="error_ksu_verify">Verifica di ReSukiSU non riuscita dopo il late-load (codice %1$d): %2$s</string>
+    <string name="error_shizuku_required">Shizuku è richiesto. Installa Shizuku da Google Play e concedi le autorizzazioni a Root My Pixel.</string>
+    <string name="error_boot_id">Impossibile leggere l\'ID di avvio</string>
+    <string name="error_receipt">Impossibile salvare la ricevuta di installazione</string>
+
+    <!-- Uptime warning -->
+    <string name="uptime_error_title">Telefono non riavviato</string>
+    <string name="uptime_error_message">Il telefono non è stato riavviato di recente. Si consiglia di riavviare il dispositivo prima dell\'installazione per garantire la stabilità dell\'exploit.</string>
+</resources>
