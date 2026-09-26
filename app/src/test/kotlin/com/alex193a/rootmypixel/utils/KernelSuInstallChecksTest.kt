@@ -14,7 +14,7 @@ class KernelSuInstallChecksTest {
             KernelSuInstallChecks.debugInfoShowsActiveKernelSu(
                 """
                 version: 35040
-                full_version: v4.1.0-88dbc786@ReSukiSU
+                full_version: v3.3.0-32601@KernelSU
                 runtime_mode: late-load
                 """.trimIndent(),
             ),
@@ -38,12 +38,12 @@ class KernelSuInstallChecksTest {
     }
 
     @Test
-    fun `trusted ReSukiSU manager signature is parsed from ksud output`() {
+    fun `trusted KernelSU manager signature is parsed from ksud output`() {
         val signature = KernelSuInstallChecks.parseManagerSignature(
-            "size: 0x377, hash: d3469712b6214462764a1d8d3e5cbe1d6819a0b629791b9f4101867821f1df64",
+            "size: 0x33b, hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6",
         )
 
-        assertEquals(0x377, signature?.size)
+        assertEquals(0x33b, signature?.size)
         assertTrue(signature != null && KernelSuInstallChecks.isTrustedManagerSignature(signature))
     }
 

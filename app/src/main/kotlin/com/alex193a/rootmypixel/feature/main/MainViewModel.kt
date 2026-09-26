@@ -48,13 +48,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val mutableState = MutableStateFlow(InstallUiState())
     private val mutableShizukuAvailable = MutableStateFlow(false)
-    private val mutableReSukiSuInstalled = MutableStateFlow(false)
+    private val mutableKernelSuInstalled = MutableStateFlow(false)
     private val mutableUptimeExceeded = MutableStateFlow(false)
     private var refreshJob: Job? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val shizukuAvailable: StateFlow<Boolean> = mutableShizukuAvailable.asStateFlow()
-    val reSukiSuInstalled: StateFlow<Boolean> = mutableReSukiSuInstalled.asStateFlow()
+    val kernelSuInstalled: StateFlow<Boolean> = mutableKernelSuInstalled.asStateFlow()
     val uptimeExceeded: StateFlow<Boolean> = mutableUptimeExceeded.asStateFlow()
 
 
@@ -119,7 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mutableUptimeExceeded.value = SystemClock.elapsedRealtime() > UPTIME_THRESHOLD_MS
 
             try {
-                mutableReSukiSuInstalled.value = app.packageManager
+                mutableKernelSuInstalled.value = app.packageManager
                     .getLaunchIntentForPackage("me.weishu.kernelsu") != null
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
                 val probe = NativeProbe.run()

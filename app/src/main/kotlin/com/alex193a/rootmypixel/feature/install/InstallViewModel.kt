@@ -228,6 +228,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                             "[+] Unroot root transport verified: ${it.label}"
                         } ?: "[!] Current-install root shell is unavailable",
                     )
+                    cleanupTemporaryArtifacts(includeTransport = false)
                 } else {
                     setPhase(InstallPhase.LoadingKernelSu, app.getString(R.string.status_loading_ksu))
                     installKernelSu(payloads)
@@ -245,6 +246,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                             "[!] No usable root transport for Unroot; grant this app root in KernelSU Manager"
                         },
                     )
+                    cleanupTemporaryArtifacts(includeTransport = rootTransport == RootTransport.AppSu)
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
@@ -684,7 +686,51 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 }
                     ?: "[!] No usable root transport for Unroot; grant this app root in KernelSU Manager",
             )
+            if (rootTransport == RootTransport.AppSu) {
+                cleanupTemporaryArtifacts(includeTransport = true)
+            }
         }
+    }
+
+    // KernelSU lives in /data/adb; everything under /data/local/tmp only exists
+    // to bootstrap the exploit. Drop the payloads and logs once the driver is
+    // loaded, and the exploit transport too once the manager grants this app
+    // root (the su/socket pair is the only root path before that grant).
+    private fun cleanupTemporaryArtifacts(includeTransport: Boolean) {
+        val files = mutableListOf(
+            "/data/local/tmp/cve-2026-43499-app.so",
+            "/data/local/tmp/cve-2026-43499-root",
+            "/data/local/tmp/ksud-pixel",
+            "/data/local/tmp/exploit.log",
+            "/data/local/tmp/paint.log",
+            "/data/local/tmp/su_daemon.log",
+        )
+        if (includeTransport) {
+            files += listOf("/data/local/tmp/su", "/data/local/tmp/temp_su.sock")
+        }
+        val command = "rm -f " + files.joinToString(" ")
+
+        val result = if (includeTransport) {
+            runCatching {
+                runCommand(listOf("su", "-c", command), ROOT_PROBE_TIMEOUT_SECONDS)
+            }.getOrNull()
+        } else {
+            val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+            if (!helper.exists()) return
+            runCatching { runHelper(helper, "-c", command) }.getOrNull()
+        }
+
+        if (result == null || result.code != 0) {
+            appendLog("[!] Temporary exploit file cleanup was incomplete")
+            return
+        }
+        appendLog(
+            if (includeTransport) {
+                "[+] Removed temporary exploit files and the exploit root transport"
+            } else {
+                "[+] Removed temporary exploit payloads and logs"
+            },
+        )
     }
 
     private fun findAvailableRootTransport(): RootTransport? {
