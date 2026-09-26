@@ -18,6 +18,7 @@
     <string name="action_install">Install KernelSU</string>
     <string name="action_reinstall">Reinstall KernelSU</string>
     <string name="action_unroot">Unroot &amp; Reboot</string>
+    <string name="action_cleanup_temporary">Clean up temporary files</string>
     <string name="action_retry">Retry</string>
     <string name="action_close">Close</string>
     <string name="action_done">Done</string>
