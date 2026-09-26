@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <android/log.h>
 #include <stdint.h>
+#include <signal.h>
 
 #define TAG "PixelNativeProbe"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -47,6 +48,15 @@ struct ksu_probe_result {
     uint32_t uapi_version;
 };
 
+// Android's seccomp policy rejects the reboot(2) syscall from app processes
+// with SIGSYS rather than letting it return ENOSYS. Catch it in the forked
+// probe so a stock kernel produces a clean negative result instead of a
+// tombstone for a throwaway child process.
+static void probe_sigsys_handler(int signo) {
+    (void) signo;
+    _exit(0);
+}
+
 static int get_kernelsu_info(struct ksu_probe_result *result) {
     int pipe_fds[2];
     memset(result, 0, sizeof(*result));
@@ -64,6 +74,11 @@ static int get_kernelsu_info(struct ksu_probe_result *result) {
         // A stock kernel can reject the supercall with SIGSYS. Keep that
         // failure isolated so probing never terminates the Android app.
         close(pipe_fds[0]);
+        struct sigaction sigsys_action;
+        memset(&sigsys_action, 0, sizeof(sigsys_action));
+        sigsys_action.sa_handler = probe_sigsys_handler;
+        sigemptyset(&sigsys_action.sa_mask);
+        sigaction(SIGSYS, &sigsys_action, NULL);
         struct ksu_probe_result child_result;
         memset(&child_result, 0, sizeof(child_result));
         int fd = -1;
