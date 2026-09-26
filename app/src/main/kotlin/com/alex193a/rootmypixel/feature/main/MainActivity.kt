@@ -84,14 +84,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val state by installViewModel.state.collectAsStateWithLifecycle()
             val shizukuAvailable by installViewModel.shizukuAvailable.collectAsStateWithLifecycle()
-            val reSukiSuInstalled by installViewModel.reSukiSuInstalled.collectAsStateWithLifecycle()
+            val kernelSuInstalled by installViewModel.kernelSuInstalled.collectAsStateWithLifecycle()
             val uptimeExceeded by installViewModel.uptimeExceeded.collectAsStateWithLifecycle()
 
             RootMyPixelTheme {
                 MainScreen(
                     state = state,
                     shizukuAvailable = shizukuAvailable,
-                    reSukiSuInstalled = reSukiSuInstalled,
+                    kernelSuInstalled = kernelSuInstalled,
                     uptimeExceeded = uptimeExceeded,
                     onRefresh = { installViewModel.refresh() },
                     onInstall = { installViewModel.install() },
@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
 private fun MainScreen(
     state: InstallUiState,
     shizukuAvailable: Boolean,
-    reSukiSuInstalled: Boolean,
+    kernelSuInstalled: Boolean,
     uptimeExceeded: Boolean,
     onRefresh: () -> Unit,
     onInstall: () -> Unit,
@@ -247,8 +247,8 @@ private fun MainScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // KernelSU Manager status
-            ReSukiSuManagerCard(
-                installed = reSukiSuInstalled,
+            KernelSuManagerCard(
+                installed = kernelSuInstalled,
                 context = LocalContext.current,
             )
 
@@ -456,7 +456,7 @@ private fun ShizukuStatusCard(available: Boolean) {
 }
 
 @Composable
-private fun ReSukiSuManagerCard(installed: Boolean, context: android.content.Context) {
+private fun KernelSuManagerCard(installed: Boolean, context: android.content.Context) {
     if (installed) return
 
     Card(
