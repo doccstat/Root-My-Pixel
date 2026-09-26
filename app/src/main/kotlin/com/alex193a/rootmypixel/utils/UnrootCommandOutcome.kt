@@ -17,13 +17,18 @@ enum class UnrootIssue(
     KernelSuLoader("ksud", R.string.unroot_issue_ksud),
     ExploitLogs("exploit-logs", R.string.unroot_issue_exploit_logs),
     RootTransportFiles("root-transport-files", R.string.unroot_issue_root_transport_files),
+    OtaStaged("ota-", R.string.unroot_issue_ota),
     Reboot("reboot", R.string.unroot_issue_reboot),
     Unknown("unknown", R.string.unroot_issue_unknown),
     ;
 
     companion object {
         fun fromMarker(marker: String): UnrootIssue =
-            entries.firstOrNull { it.marker == marker } ?: Unknown
+            entries.firstOrNull { it.marker == marker }
+                ?: entries.firstOrNull {
+                    it.marker.endsWith("-") && marker.startsWith(it.marker)
+                }
+                ?: Unknown
 
         val affectedByMissingTransport: List<UnrootIssue> = listOf(
             RootTransport,
@@ -35,6 +40,7 @@ enum class UnrootIssue(
             KernelSuLoader,
             ExploitLogs,
             RootTransportFiles,
+            OtaStaged,
         )
     }
 }
