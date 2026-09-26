@@ -120,7 +120,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             try {
                 mutableReSukiSuInstalled.value = app.packageManager
-                    .getLaunchIntentForPackage("com.resukisu.resukisu") != null
+                    .getLaunchIntentForPackage("me.weishu.kernelsu") != null
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
                 val probe = NativeProbe.run()
                 if (kernelSuStatus.isActive) {
@@ -244,7 +244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private enum class RootTransport(val label: String) {
-        AppSu("ReSukiSU app su"),
+        AppSu("KernelSU app su"),
         AppCveHelper("current-install CVE helper"),
         ShizukuCveSu("current-install CVE su via Shizuku"),
     }

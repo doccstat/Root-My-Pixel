@@ -38,8 +38,8 @@ internal object KernelSuInstallChecks {
 
     private val TRUSTED_MANAGER_SIGNATURES = setOf(
         ManagerSignature(
-            size = 0x377,
-            hash = "d3469712b6214462764a1d8d3e5cbe1d6819a0b629791b9f4101867821f1df64",
+            size = 0x33b,
+            hash = "c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6",
         ),
     )
 }
