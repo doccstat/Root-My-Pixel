@@ -30,8 +30,17 @@ class TempRootCleanupTest {
     fun `command ends with the sentinel and never targets the whole tmp dir`() {
         val command = TempRootCleanup.cleanupCommand(includeTransport = true)
 
-        assertTrue(command.startsWith("rm -f "))
+        assertTrue(command.contains("rm -f "))
         assertTrue(command.endsWith("&& echo ${TempRootCleanup.SENTINEL}"))
         assertFalse(command.contains("/data/local/tmp/*"))
+    }
+
+    @Test
+    fun `command sweeps only this app's tombstones`() {
+        val command = TempRootCleanup.cleanupCommand(includeTransport = false)
+
+        assertTrue(command.startsWith(TempRootCleanup.tombstoneSweepCommand()))
+        assertTrue(command.contains("/data/tombstones/tombstone_*"))
+        assertTrue(command.contains(TempRootCleanup.PACKAGE))
     }
 }

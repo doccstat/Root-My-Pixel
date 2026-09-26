@@ -34,6 +34,9 @@ object TempRootCleanup {
         "/data/local/tmp/temp_su.sock",
     )
 
+    /** The app that owns the tombstone sweep below. */
+    const val PACKAGE = "com.alex193a.rootmypixel"
+
     data class Outcome(val success: Boolean, val output: String)
 
     /**
@@ -54,8 +57,21 @@ object TempRootCleanup {
 
     /** The exact shell command handed to KernelSU's `su`. */
     fun cleanupCommand(includeTransport: Boolean): String {
-        return "rm -f " + files(includeTransport).joinToString(" ") + " && echo $SENTINEL"
+        return tombstoneSweepCommand() + "; rm -f " +
+            files(includeTransport).joinToString(" ") + " && echo $SENTINEL"
     }
+
+    /**
+     * Crash dumps of the forked native probe are the one artefact that outlives
+     * a reboot and names this app from outside `/data/local/tmp`. Only dumps
+     * that mention [PACKAGE] are removed so unrelated crashes are preserved;
+     * the sweep is best-effort and never blocks the payload deletion.
+     */
+    fun tombstoneSweepCommand(): String =
+        "for t in /data/tombstones/tombstone_*; do " +
+            "case \"${'$'}t\" in *.pb) continue;; esac; " +
+            "grep -qF $PACKAGE \"${'$'}t\" 2>/dev/null && " +
+            "rm -f \"${'$'}t\" \"${'$'}t.pb\"; done"
 
     fun files(includeTransport: Boolean): List<String> =
         if (includeTransport) BASE_FILES + TRANSPORT_FILES else BASE_FILES
