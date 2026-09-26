@@ -20,13 +20,13 @@ object NativeProbe {
     external fun getKernelSuInfoNative(): String
 
     /**
-     * Check if KernelSU/ReSukiSU is active via kernel driver syscall in a fork-isolated process.
+     * Check if KernelSU/KernelSU is active via kernel driver syscall in a fork-isolated process.
      * Kept for callers that only require a Boolean.
      */
     external fun isKernelSuActiveNative(): Boolean
 
     /**
-     * Check the actual KernelSU/ReSukiSU kernel driver. This deliberately does
+     * Check the actual KernelSU/KernelSU kernel driver. This deliberately does
      * not treat `su`, a temporary CVE daemon, or filesystem paths as proof that
      * KernelSU is loaded.
      */

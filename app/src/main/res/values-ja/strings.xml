@@ -3,7 +3,7 @@
   Japanese translations.
 
   Terminology is kept deliberately literal where the term is one the user will
-  also see in logs, on GitHub, or in ReSukiSU itself: ReSukiSU, Shizuku,
+  also see in logs, on GitHub, or in KernelSU itself: KernelSU, Shizuku,
   SELinux, KMI, root, exploit and payload stay in their original form rather
   than being rendered into Japanese, because a user who has to search for an
   error needs the searchable word. Prose around them is translated normally.
@@ -17,16 +17,16 @@
     <string name="status_checking">端末の対応状況を確認しています…</string>
     <string name="status_not_installed">対応端末です — インストールできます</string>
     <string name="status_support_failed">未対応の端末です</string>
-    <string name="status_ksu_active">ReSukiSU が有効です</string>
+    <string name="status_ksu_active">KernelSU が有効です</string>
     <string name="shikuzu_shell_active">Shizuku に接続済み・有効です</string>
     <string name="shikuzu_shell_not_active">Shizuku に接続されていません — exploit は失敗します</string>
     <string name="developed_by">開発</string>
-    <string name="missing_manager_title">ReSukiSU Manager が未インストールです</string>
-    <string name="missing_manager_description">root 権限の許可を管理するには ReSukiSU Manager アプリが必要です</string>
+    <string name="missing_manager_title">KernelSU Manager が未インストールです</string>
+    <string name="missing_manager_description">root 権限の許可を管理するには KernelSU Manager アプリが必要です</string>
 
     <!-- Actions -->
-    <string name="action_install">ReSukiSU をインストール</string>
-    <string name="action_reinstall">ReSukiSU を再インストール</string>
+    <string name="action_install">KernelSU をインストール</string>
+    <string name="action_reinstall">KernelSU を再インストール</string>
     <string name="action_unroot">root 権限を削除して再起動</string>
     <string name="action_retry">再試行</string>
     <string name="action_close">閉じる</string>
@@ -38,7 +38,7 @@
     <string name="action_cancel">キャンセル</string>
     <string name="unroot_dialog_title">root 権限を削除しますか？</string>
     <string name="unroot_dialog_message">一時 exploit ファイル、KernelSU のデータ (/data/adb) を削除し、端末を再起動して純正カーネル状態に戻します。</string>
-    <string name="unroot_root_access_required">ReSukiSU Manager で Root My Pixel に root 権限を許可するか、インストールを再実行して一時 root シェルを復元してください。</string>
+    <string name="unroot_root_access_required">KernelSU Manager で Root My Pixel に root 権限を許可するか、インストールを再実行して一時 root シェルを復元してください。</string>
     <string name="status_unrooting">クリーンアップと再起動中…</string>
     <string name="status_unroot_incomplete">クリーンアップ未完了 — 操作を選択してください</string>
     <string name="unroot_incomplete_title">削除できなかった項目があります</string>
@@ -52,7 +52,7 @@
     <string name="unroot_issue_selinux">SELinux enforcing モード</string>
     <string name="unroot_issue_cve_app">Exploit ペイロード</string>
     <string name="unroot_issue_cve_root">Root ヘルパー</string>
-    <string name="unroot_issue_ksud">ReSukiSU ローダー</string>
+    <string name="unroot_issue_ksud">KernelSU ローダー</string>
     <string name="unroot_issue_exploit_logs">Exploit の一時ログ</string>
     <string name="unroot_issue_root_transport_files">一時 root クライアントとソケット</string>
     <string name="unroot_issue_reboot">システム再起動要求</string>
@@ -60,7 +60,7 @@
     <string name="copied_to_clipboard">ログをクリップボードにコピーしました</string>
 
     <!-- Install screen -->
-    <string name="install_title">ReSukiSU をインストール</string>
+    <string name="install_title">KernelSU をインストール</string>
     <string name="install_keep_open">インストール中はアプリを開いたままにしてください</string>
     <string name="install_live_progress">実行中のログ</string>
     <string name="install_preparing">準備しています…</string>
@@ -70,33 +70,33 @@
     <string name="phase_ready">インストールの準備ができました</string>
     <string name="phase_downloading">ペイロードを展開しています…</string>
     <string name="phase_exploiting">exploit を実行しています…</string>
-    <string name="phase_loading_ksu">ReSukiSU モジュールを読み込んでいます…</string>
+    <string name="phase_loading_ksu">KernelSU モジュールを読み込んでいます…</string>
     <string name="phase_installed">インストールが完了しました</string>
     <string name="phase_failed">インストールに失敗しました</string>
 
     <!-- Status messages -->
     <string name="status_downloading">APK からペイロードを展開しています…</string>
     <string name="status_exploit">カーネル exploit を実行しています…</string>
-    <string name="status_loading_ksu">ReSukiSU モジュールを読み込んでいます…</string>
+    <string name="status_loading_ksu">KernelSU モジュールを読み込んでいます…</string>
     <string name="status_install_failed">インストールに失敗しました</string>
 
     <!-- Steps -->
     <string name="step_support_title">対応確認</string>
     <string name="step_support_detail">端末の対応状況を確認します</string>
     <string name="step_download_title">ペイロード展開</string>
-    <string name="step_download_detail">同梱の exploit と ReSukiSU のバイナリを展開します</string>
+    <string name="step_download_detail">同梱の exploit と KernelSU のバイナリを展開します</string>
     <string name="step_exploit_title">exploit 実行</string>
     <string name="step_exploit_detail">一時的な root 権限を取得します</string>
-    <string name="step_ksu_title">ReSukiSU 読み込み</string>
-    <string name="step_ksu_detail">ReSukiSU カーネルモジュールを導入します</string>
+    <string name="step_ksu_title">KernelSU 読み込み</string>
+    <string name="step_ksu_detail">KernelSU カーネルモジュールを導入します</string>
 
     <!-- Log messages -->
     <string name="log_profile">一致したプロファイル: %1$s</string>
     <string name="log_download_verified">ペイロードの展開が完了しました</string>
     <string name="log_bootstrap_root">root の初期化が完了しました</string>
-    <string name="log_ksu_staged">ReSukiSU のバイナリを配置しました</string>
-    <string name="log_ksu_control_verified">ReSukiSU の制御インターフェースを確認しました</string>
-    <string name="log_install_complete">インストール完了 — ReSukiSU が有効です</string>
+    <string name="log_ksu_staged">KernelSU のバイナリを配置しました</string>
+    <string name="log_ksu_control_verified">KernelSU の制御インターフェースを確認しました</string>
+    <string name="log_install_complete">インストール完了 — KernelSU が有効です</string>
 
     <!-- Errors -->
     <string name="error_helper_unavailable">ネイティブヘルパーを利用できません</string>
@@ -106,7 +106,7 @@
     <string name="error_success_marker">exploit が成功を報告しませんでした</string>
     <string name="error_route_disabled">このバージョンのペイロードは端末の kernel 5.10 を安全にサポートしていません。カーネルへの試行は実行されておらず、同じペイロードを再試行しても結果は変わりません。</string>
     <string name="error_ksu_stage">ksud の配置に失敗しました: %1$s</string>
-    <string name="error_ksu_verify">late-load 後の ReSukiSU 検証に失敗しました (終了コード %1$d): %2$s</string>
+    <string name="error_ksu_verify">late-load 後の KernelSU 検証に失敗しました (終了コード %1$d): %2$s</string>
     <string name="error_shizuku_required">Shizuku が必要です。Google Play から Shizuku をインストールし、Root My Pixel に権限を許可してください。</string>
     <string name="error_boot_id">boot ID を読み取れません</string>
     <string name="error_receipt">インストール記録を保存できません</string>

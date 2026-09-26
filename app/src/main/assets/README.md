@@ -17,7 +17,9 @@ make TARGET=frankel-CP2A.260605.012 ANDROID_NDK_HOME=...
 The output `cve-2026-43499-app.release.so` goes into `app/src/main/assets/exploits/<target>.so`.
 
 ### ksud/ksud
-The ReSukiSU late-load binary, downloaded from official ReSukiSU releases.
+The KernelSU late-load binary, downloaded from official KernelSU releases.
+Pinned to upstream `tiann/KernelSU` v3.3.0 (`ksud-aarch64-linux-android`,
+sha256 `8614de6cdc2233c71fd0d1c64381ea10fbe6658651bae9b5a8dab4fe08e6344b`).
 
 One binary covers every KMI. It embeds a `kernelsu.ko` per KMI (`android12-5.10`
 through `android16-6.12`) and selects between them from the `--kmi` it is passed
