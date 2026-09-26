@@ -41,6 +41,35 @@ class AppBackupScriptTest {
     }
 
     @Test
+    fun `captures the kernelsu and vector root state`() {
+        val text = script()
+
+        for (path in listOf(
+            "/data/adb/ksu/.allowlist",
+            "/data/adb/ksu/.feature_config",
+            "/data/adb/modules",
+            "/data/adb/lspd/config",
+            "/data/adb/post-fs-data.d",
+            "/data/adb/service.d",
+        )) {
+            assertTrue("missing root-state path: $path", text.contains(path))
+        }
+        assertTrue(text.contains("RMP_RB_OK"))
+        assertTrue(text.contains("RMP_RB_FAIL"))
+        assertTrue(text.contains("RMP_RR_OK"))
+        assertTrue(text.contains("RMP_RR_FAIL"))
+    }
+
+    @Test
+    fun `records and reapplies runtime permissions`() {
+        val text = script()
+
+        assertTrue(text.contains("runtime permissions:"))
+        assertTrue(text.contains("permissions.txt"))
+        assertTrue(text.contains("pm grant"))
+    }
+
+    @Test
     fun `rejects wildcard and relative extra paths`() {
         val text = script()
 
