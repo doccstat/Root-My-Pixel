@@ -57,6 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableUptimeExceeded = MutableStateFlow(false)
     private val mutableBackupPlan = MutableStateFlow<List<String>>(emptyList())
     private val mutableArchivedPackages = MutableStateFlow<Set<String>>(emptySet())
+    private val mutableExtraPaths = MutableStateFlow<List<String>>(emptyList())
     private var refreshJob: Job? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
@@ -69,6 +70,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Packages that currently have an archive on disk. */
     val archivedPackages: StateFlow<Set<String>> = mutableArchivedPackages.asStateFlow()
+
+    /** Extra absolute directories archived and removed with the selected apps. */
+    val extraPaths: StateFlow<List<String>> = mutableExtraPaths.asStateFlow()
 
 
     private val shizukuPermissionHandler = Handler(Looper.getMainLooper())
@@ -563,11 +567,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reloadBackupState() {
         mutableBackupPlan.value = AppBackupStore.loadPlan(app)
         mutableArchivedPackages.value = AppBackupStore.archivedPackages(app)
+        mutableExtraPaths.value = AppBackupStore.loadExtraPaths(app)
     }
 
     /** Persists the picker selection. */
     fun setBackupPlan(packages: List<String>) {
         AppBackupStore.savePlan(app, packages)
+        reloadBackupState()
+    }
+
+    /** Persists the extra-directory list entered in the picker. */
+    fun setExtraPaths(paths: List<String>) {
+        AppBackupStore.saveExtraPaths(app, paths)
         reloadBackupState()
     }
 
@@ -580,23 +591,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         reloadBackupState()
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
         val installed = mutableBackupPlan.value.filter(::isPackageInstalled)
-        if (installed.isEmpty()) {
-            appendUnrootLog("[i] No selected apps installed; skipping app backup")
+        val extras = AppBackupStore.loadExtraPaths(app)
+        if (installed.isEmpty() && extras.isEmpty()) {
+            appendUnrootLog("[i] No selected apps or directories; skipping backup")
             return true
         }
 
-        mutableState.value = mutableState.value.copy(
-            message = app.getString(R.string.status_backing_up),
-        )
-        appendUnrootLog("[*] Backing up ${installed.size} selected app(s)...")
-        val outcome = AppBackupRunner.backup(app, installed, helper)
-        appendUnrootLog(
-            "[*] App backup ${outcome.summary}" +
-                if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
-        )
-        if (!outcome.isComplete) {
-            appendUnrootLog("[!] Aborting unroot: backup incomplete, nothing was removed")
-            return false
+        mutableState.value = mutableState.value.copy(message = app.getString(R.string.status_backing_up))
+
+        // Archive everything before removing anything, so a failed archive
+        // leaves the device untouched.
+        if (installed.isNotEmpty()) {
+            appendUnrootLog("[*] Backing up ${installed.size} selected app(s)...")
+            val outcome = AppBackupRunner.backup(app, installed, helper)
+            appendUnrootLog(
+                "[*] App backup ${outcome.summary}" +
+                    if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+            )
+            if (!outcome.isComplete) {
+                appendUnrootLog("[!] Aborting unroot: app backup incomplete, nothing was removed")
+                return false
+            }
+        }
+
+        if (extras.isNotEmpty()) {
+            appendUnrootLog("[*] Archiving and removing ${extras.size} extra director(ies)...")
+            val outcome = AppBackupRunner.backupExtras(app, extras, helper)
+            appendUnrootLog(
+                "[*] Extra-path backup ${outcome.summary}" +
+                    if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+            )
+            if (!outcome.isComplete) {
+                appendUnrootLog("[!] Aborting unroot: extra-path backup incomplete")
+                return false
+            }
         }
 
         var removedAll = true
@@ -623,21 +651,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             reloadBackupState()
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
             val targets = AppBackupStore.restorable(app).filterNot(::isPackageInstalled)
-            if (targets.isEmpty()) {
-                appendUnrootLog("[i] Nothing to restore: every archived app is already installed")
+            val extras = AppBackupStore.loadExtraPaths(app)
+                .takeIf { AppBackupStore.hasExtraBackup(app) }
+                .orEmpty()
+            if (targets.isEmpty() && extras.isEmpty()) {
+                appendUnrootLog(
+                    "[i] Nothing to restore: archived apps are installed and no " +
+                        "extra directory has an archive",
+                )
                 return@launch
             }
             mutableState.value = mutableState.value.copy(
                 message = app.getString(R.string.status_restoring),
             )
-            appendUnrootLog("[*] Restoring ${targets.size} app(s) from backup...")
-            val outcome = AppBackupRunner.restore(app, targets, helper)
-            appendUnrootLog(
-                "[*] App restore ${outcome.summary}" +
-                    if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
-            )
-            outcome.failed.forEach { (pkg, reason) ->
-                appendUnrootLog("[!] Restore failed: $pkg ($reason)")
+            if (targets.isNotEmpty()) {
+                appendUnrootLog("[*] Restoring ${targets.size} app(s) from backup...")
+                val outcome = AppBackupRunner.restore(app, targets, helper)
+                appendUnrootLog(
+                    "[*] App restore ${outcome.summary}" +
+                        if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+                )
+                outcome.failed.forEach { (pkg, reason) ->
+                    appendUnrootLog("[!] Restore failed: $pkg ($reason)")
+                }
+            }
+            if (extras.isNotEmpty()) {
+                appendUnrootLog("[*] Restoring ${extras.size} extra director(ies) from backup...")
+                val outcome = AppBackupRunner.restoreExtras(app, extras, helper)
+                appendUnrootLog(
+                    "[*] Extra-path restore ${outcome.summary}" +
+                        if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+                )
             }
             mutableState.value = mutableState.value.copy(
                 phase = InstallPhase.Installed,

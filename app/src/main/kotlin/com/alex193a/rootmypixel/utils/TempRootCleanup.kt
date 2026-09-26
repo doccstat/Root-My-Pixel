@@ -27,6 +27,14 @@ object TempRootCleanup {
         "/data/local/tmp/exploit.log",
         "/data/local/tmp/paint.log",
         "/data/local/tmp/su_daemon.log",
+        "/data/local/tmp/unr00t.log",
+        "/data/local/tmp/rmp-backup",
+        // A half-written transport rename (`su.new.<pid>` -> `su`) can survive
+        // an aborted exploit; unroot.sh already sweeps it.
+        "/data/local/tmp/.su.new*",
+        // Capture-side logcat dump, including every rotation, because a root
+        // trace can land in any of them.
+        "/data/local/tmp/rt.log*",
         APEX_SU,
     )
 
@@ -50,16 +58,18 @@ object TempRootCleanup {
         includeTransport: Boolean,
         helper: File? = null,
         timeoutSeconds: Long = 10L,
+        extraPaths: List<String> = emptyList(),
     ): Outcome {
-        val command = cleanupCommand(includeTransport)
+        val command = cleanupCommand(includeTransport, extraPaths)
         val result = RootShell.run(command, helper = helper, timeoutSeconds = timeoutSeconds)
         return Outcome(result.output.contains(SENTINEL), result.output)
     }
 
     /** The exact shell command handed to KernelSU's `su`. */
-    fun cleanupCommand(includeTransport: Boolean): String {
-        return tombstoneSweepCommand() + "; rm -f " +
-            files(includeTransport).joinToString(" ") + " && echo $SENTINEL"
+    fun cleanupCommand(includeTransport: Boolean, extraPaths: List<String> = emptyList()): String {
+        val targets = files(includeTransport) + extraPaths
+        return tombstoneSweepCommand() + "; rm -rf " +
+            targets.joinToString(" ") + " && echo $SENTINEL"
     }
 
     /**
