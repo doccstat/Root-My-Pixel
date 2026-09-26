@@ -43,4 +43,28 @@ class UnrootCommandOutcomeTest {
         assertTrue(outcome.transportUnavailable)
         assertEquals(UnrootIssue.affectedByMissingTransport, outcome.issues)
     }
+
+    @Test
+    fun parse_mapsStagedUpdateCleanupFailuresToTheOtaIssue() {
+        val outcome = UnrootCommandOutcome.parse(
+            """
+            UNROOT_OTA_STAGED:1
+            UNROOT_FAIL:ota-payload:1
+            UNROOT_FAIL:ota-metadata:1
+            UNROOT_CLEANUP_PARTIAL
+            """.trimIndent(),
+        )
+
+        assertFalse(outcome.cleanupComplete)
+        assertEquals(listOf(UnrootIssue.OtaStaged), outcome.issues)
+    }
+
+    @Test
+    fun parse_treatsTheStagedUpdateMarkerAsInformational() {
+        val outcome = UnrootCommandOutcome.parse("UNROOT_OTA_STAGED:1")
+
+        assertTrue(outcome.issues.isEmpty())
+        assertTrue(outcome.hasStructuredOutput)
+        assertFalse(outcome.cleanupComplete)
+    }
 }

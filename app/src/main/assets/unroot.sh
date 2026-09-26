@@ -68,6 +68,22 @@ cleanup_step cve-root rm -f /data/local/tmp/cve-2026-43499-root
 cleanup_step ksud rm -f /data/local/tmp/ksud-pixel
 cleanup_step exploit-logs rm -f /data/local/tmp/exploit.log /data/local/tmp/su_daemon.log
 
+# A staged virtual-A/B update is applied by the reboot itself: update_engine's
+# CleanupPreviousUpdateAction calls snapshot->InitiateMerge() and the device
+# boots the new build even though nothing was ever "installed". Cancel the state
+# first, and let a failure block the reboot rather than risk applying it.
+ota_staged=0
+[ -n "$(ls -A /data/ota_package 2>/dev/null)" ] && ota_staged=1
+[ -n "$(ls -A /metadata/ota/snapshots 2>/dev/null)" ] && ota_staged=1
+echo "UNROOT_OTA_STAGED:$ota_staged"
+
+cleanup_step ota-stop-engine /system/bin/sh -c '\''stop update_engine'\''
+cleanup_step ota-payload /system/bin/sh -c '\''rm -rf /data/ota_package/*'\''
+cleanup_step ota-prefs /system/bin/sh -c '\''rm -rf /data/misc/update_engine/prefs/* /data/misc/update_engine/tmp/*'\''
+cleanup_step ota-metadata /system/bin/sh -c '\''rm -rf /metadata/ota/*'\''
+cleanup_step ota-sync /system/bin/sh -c '\''sync'\''
+cleanup_step ota-start-engine /system/bin/sh -c '\''start update_engine'\''
+
 if [ "$failed" -ne 0 ]; then
     echo "UNROOT_CLEANUP_PARTIAL"
     exit 0
