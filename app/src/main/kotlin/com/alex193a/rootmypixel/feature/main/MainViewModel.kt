@@ -58,6 +58,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableBackupPlan = MutableStateFlow<List<String>>(emptyList())
     private val mutableArchivedPackages = MutableStateFlow<Set<String>>(emptySet())
     private val mutableExtraPaths = MutableStateFlow<List<String>>(emptyList())
+    private val mutableHasRootState = MutableStateFlow(false)
     private var refreshJob: Job? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
@@ -73,6 +74,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Extra absolute directories archived and removed with the selected apps. */
     val extraPaths: StateFlow<List<String>> = mutableExtraPaths.asStateFlow()
+
+    /** True when a KernelSU/Vector root-state archive is on disk. */
+    val rootStateArchived: StateFlow<Boolean> = mutableHasRootState.asStateFlow()
 
 
     private val shizukuPermissionHandler = Handler(Looper.getMainLooper())
@@ -568,6 +572,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mutableBackupPlan.value = AppBackupStore.loadPlan(app)
         mutableArchivedPackages.value = AppBackupStore.archivedPackages(app)
         mutableExtraPaths.value = AppBackupStore.loadExtraPaths(app)
+        mutableHasRootState.value = AppBackupStore.hasRootStateBackup(app)
     }
 
     /** Persists the picker selection. */
@@ -593,8 +598,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val installed = mutableBackupPlan.value.filter(::isPackageInstalled)
         val extras = AppBackupStore.loadExtraPaths(app)
         if (installed.isEmpty() && extras.isEmpty()) {
-            appendUnrootLog("[i] No selected apps or directories; skipping backup")
-            return true
+            appendUnrootLog(
+                "[i] No selected apps or directories; archiving the KernelSU/Vector " +
+                    "root state only",
+            )
         }
 
         mutableState.value = mutableState.value.copy(message = app.getString(R.string.status_backing_up))
@@ -627,6 +634,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        // The KernelSU/Vector layer outside any app sandbox: superuser grants,
+        // app profiles, module files and markers, Vector's module config and
+        // the staged `.d` scripts. `unroot.sh` removes all of /data/adb, so
+        // this has to be captured before the reboot.
+        appendUnrootLog("[*] Archiving KernelSU/Vector root state...")
+        val rootState = AppBackupRunner.backupRootState(app, helper)
+        appendUnrootLog(
+            "[*] Root-state backup ${rootState.summary}" +
+                if (rootState.raw.isBlank()) "" else "\n${rootState.raw.trim()}",
+        )
+        if (!rootState.isComplete) {
+            appendUnrootLog("[!] Aborting unroot: root-state backup incomplete")
+            return false
+        }
+
         var removedAll = true
         for (pkg in installed) {
             if (!AppBackupStore.hasBackup(app, pkg)) {
@@ -654,10 +676,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val extras = AppBackupStore.loadExtraPaths(app)
                 .takeIf { AppBackupStore.hasExtraBackup(app) }
                 .orEmpty()
-            if (targets.isEmpty() && extras.isEmpty()) {
+            val rootState = AppBackupStore.hasRootStateBackup(app)
+            if (targets.isEmpty() && extras.isEmpty() && !rootState) {
                 appendUnrootLog(
-                    "[i] Nothing to restore: archived apps are installed and no " +
-                        "extra directory has an archive",
+                    "[i] Nothing to restore: archived apps are installed, no extra " +
+                        "directory has an archive and there is no root-state archive",
                 )
                 return@launch
             }
@@ -682,6 +705,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "[*] Extra-path restore ${outcome.summary}" +
                         if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
                 )
+            }
+            if (rootState) {
+                appendUnrootLog("[*] Restoring KernelSU/Vector root state...")
+                val outcome = AppBackupRunner.restoreRootState(app, helper)
+                appendUnrootLog(
+                    "[*] Root-state restore ${outcome.summary}" +
+                        if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+                )
+                if (!outcome.isComplete) {
+                    appendUnrootLog(
+                        "[!] Root-state restore incomplete; a soft restart may be " +
+                            "needed before modules and grants take effect",
+                    )
+                }
             }
             mutableState.value = mutableState.value.copy(
                 phase = InstallPhase.Installed,

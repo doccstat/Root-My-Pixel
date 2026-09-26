@@ -91,6 +91,7 @@ class MainActivity : ComponentActivity() {
             val backupPlan by installViewModel.backupPlan.collectAsStateWithLifecycle()
             val archivedPackages by installViewModel.archivedPackages.collectAsStateWithLifecycle()
             val extraPaths by installViewModel.extraPaths.collectAsStateWithLifecycle()
+            val rootStateArchived by installViewModel.rootStateArchived.collectAsStateWithLifecycle()
 
             RootMyPixelTheme {
                 MainScreen(
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
                     backupCount = backupPlan.size,
                     extraCount = extraPaths.size,
                     archivedCount = archivedPackages.size,
+                    hasRootState = rootStateArchived,
                     onRefresh = { installViewModel.refresh() },
                     onChooseApps = {
                         startActivity(Intent(this, AppPickerActivity::class.java))
@@ -133,6 +135,7 @@ private fun MainScreen(
     backupCount: Int,
     extraCount: Int,
     archivedCount: Int,
+    hasRootState: Boolean,
     onRefresh: () -> Unit,
     onChooseApps: () -> Unit,
     onRestoreApps: () -> Unit,
@@ -365,7 +368,7 @@ private fun MainScreen(
                 Text(text = stringResource(R.string.action_choose_apps, backupCount, extraCount))
             }
 
-            if (archivedCount > 0 || extraCount > 0) {
+            if (archivedCount > 0 || extraCount > 0 || hasRootState) {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = onRestoreApps,

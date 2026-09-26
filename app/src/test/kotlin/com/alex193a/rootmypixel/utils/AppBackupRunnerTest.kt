@@ -48,4 +48,20 @@ class AppBackupRunnerTest {
         assertTrue(outcome.isComplete)
         assertEquals(listOf("extra"), outcome.succeeded)
     }
+
+    @Test
+    fun `parses root-state markers with their own prefixes`() {
+        val outcome = AppBackupRunner.parse(
+            output = """
+                RMP_RR_OK:rootstate
+                RMP_RR_DONE:ok=1:fail=0
+            """.trimIndent(),
+            okPrefix = "RMP_RR_OK:",
+            failPrefix = "RMP_RR_FAIL:",
+            donePrefix = "RMP_RR_DONE:",
+        )
+
+        assertTrue(outcome.isComplete)
+        assertEquals(listOf("rootstate"), outcome.succeeded)
+    }
 }

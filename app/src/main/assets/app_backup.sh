@@ -81,6 +81,15 @@ backup_one() {
         echo "stamp=$(date +%s)"
     } > "$dir/meta.txt" 2>/dev/null
 
+    # Runtime permission grants live in system state, not the app sandbox, so
+    # they are not in the data tar. Record the granted ones; restore re-grants
+    # them after the reinstall.
+    dumpsys package "$pkg" 2>/dev/null \
+        | sed -n '/runtime permissions:/,/^$/p' \
+        | grep 'granted=true' \
+        | sed 's/^ *//; s/:.*//' \
+        > "$dir/permissions.txt" 2>/dev/null
+
     echo "RMP_BK_OK:$pkg"
     return 0
 }
@@ -116,6 +125,13 @@ restore_one() {
             chown -R "$uid:$uid" "$d" 2>/dev/null
             restorecon -R "$d" >/dev/null 2>&1
         done
+    fi
+
+    if [ -f "$dir/permissions.txt" ]; then
+        while IFS= read -r perm; do
+            [ -n "$perm" ] || continue
+            pm grant "$pkg" "$perm" >/dev/null 2>&1
+        done < "$dir/permissions.txt"
     fi
 
     echo "RMP_RS_OK:$pkg"
@@ -197,7 +213,79 @@ extra_restore() {
     return 0
 }
 
-# Extra-path modes take no package arguments and own their own terminators.
+# KernelSU/Vector state that lives outside any app's data directory: superuser
+# grants and app profiles, module files and enable/disable markers, the
+# LSPosed/Vector module configuration, and the staged `.d` scripts. Unroot
+# removes all of `/data/adb`, so this is what a restore has to put back on top
+# of the fresh install.
+ROOT_STATE_PATHS="\
+/data/adb/ksu/.allowlist \
+/data/adb/ksu/.feature_config \
+/data/adb/modules \
+/data/adb/modules_update \
+/data/adb/lspd/config \
+/data/adb/post-fs-data.d \
+/data/adb/service.d"
+
+root_backup() {
+    dir="$BACKUP_ROOT/_rootstate"
+    rm -rf "$dir" 2>/dev/null
+    mkdir -p "$dir" 2>/dev/null || { echo "RMP_RB_FAIL:rootstate:mkdir"; return 1; }
+
+    rel=""
+    for p in $ROOT_STATE_PATHS; do
+        [ -e "$p" ] || continue
+        rel="$rel ${p#/}"
+    done
+    if [ -z "$rel" ]; then
+        echo "RMP_RB_FAIL:rootstate:empty"
+        rm -rf "$dir" 2>/dev/null
+        return 1
+    fi
+
+    if ! tar -czf "$dir/data.tgz" -C / $rel 2>/dev/null; then
+        echo "RMP_RB_FAIL:rootstate:tar"
+        rm -rf "$dir" 2>/dev/null
+        return 1
+    fi
+
+    : > "$dir/meta.txt"
+    for p in $ROOT_STATE_PATHS; do
+        [ -e "$p" ] || continue
+        printf '%s %s\n' "${p#/}" \
+            "$(stat -c '%u:%g %a' "$p" 2>/dev/null || echo '0:0 755')" >> "$dir/meta.txt"
+    done
+
+    echo "RMP_RB_OK:rootstate"
+    return 0
+}
+
+root_restore() {
+    dir="$BACKUP_ROOT/_rootstate"
+    if [ ! -f "$dir/data.tgz" ]; then
+        echo "RMP_RR_FAIL:rootstate:no-backup"
+        return 1
+    fi
+    mkdir -p /data/adb 2>/dev/null
+    if ! tar -xzf "$dir/data.tgz" -C / 2>/dev/null; then
+        echo "RMP_RR_FAIL:rootstate:untar"
+        return 1
+    fi
+    if [ -f "$dir/meta.txt" ]; then
+        while read -r rel owner mode; do
+            [ -n "$rel" ] || continue
+            [ -e "/$rel" ] || continue
+            chown -R "$owner" "/$rel" 2>/dev/null
+            chmod "$mode" "/$rel" 2>/dev/null
+            restorecon -R "/$rel" >/dev/null 2>&1
+        done < "$dir/meta.txt"
+    fi
+    echo "RMP_RR_OK:rootstate"
+    return 0
+}
+
+# Extra-path and root-state modes take no package arguments and own their own
+# terminators.
 case "$MODE" in
     extra-backup)
         if extra_backup; then echo "RMP_XB_DONE:ok=1:fail=0"; else echo "RMP_XB_DONE:ok=0:fail=1"; fi
@@ -205,6 +293,14 @@ case "$MODE" in
         ;;
     extra-restore)
         if extra_restore; then echo "RMP_XR_DONE:ok=1:fail=0"; else echo "RMP_XR_DONE:ok=0:fail=1"; fi
+        exit 0
+        ;;
+    root-backup)
+        if root_backup; then echo "RMP_RB_DONE:ok=1:fail=0"; else echo "RMP_RB_DONE:ok=0:fail=1"; fi
+        exit 0
+        ;;
+    root-restore)
+        if root_restore; then echo "RMP_RR_DONE:ok=1:fail=0"; else echo "RMP_RR_DONE:ok=0:fail=1"; fi
         exit 0
         ;;
 esac

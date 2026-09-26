@@ -22,6 +22,12 @@ object AppBackupRunner {
     private const val XR_OK = "RMP_XR_OK:"
     private const val XR_FAIL = "RMP_XR_FAIL:"
     private const val XR_DONE = "RMP_XR_DONE:"
+    private const val RB_OK = "RMP_RB_OK:"
+    private const val RB_FAIL = "RMP_RB_FAIL:"
+    private const val RB_DONE = "RMP_RB_DONE:"
+    private const val RR_OK = "RMP_RR_OK:"
+    private const val RR_FAIL = "RMP_RR_FAIL:"
+    private const val RR_DONE = "RMP_RR_DONE:"
 
     data class Outcome(
         val succeeded: List<String>,
@@ -67,6 +73,24 @@ object AppBackupRunner {
         helper: File?,
         timeoutSeconds: Long = 600L,
     ): Outcome = runExtras(context, "extra-restore", paths, helper, timeoutSeconds, XR_OK, XR_FAIL, XR_DONE)
+
+    /**
+     * Archives the KernelSU/Vector state under `/data/adb` - superuser grants
+     * and app profiles, module files plus their enable/disable markers, the
+     * LSPosed/Vector module configuration and the staged `.d` scripts.
+     */
+    fun backupRootState(
+        context: Context,
+        helper: File?,
+        timeoutSeconds: Long = 600L,
+    ): Outcome = runExtras(context, "root-backup", emptyList(), helper, timeoutSeconds, RB_OK, RB_FAIL, RB_DONE)
+
+    /** Puts that state back on top of the fresh `/data/adb` created by a re-root. */
+    fun restoreRootState(
+        context: Context,
+        helper: File?,
+        timeoutSeconds: Long = 600L,
+    ): Outcome = runExtras(context, "root-restore", emptyList(), helper, timeoutSeconds, RR_OK, RR_FAIL, RR_DONE)
 
     private fun runExtras(
         context: Context,

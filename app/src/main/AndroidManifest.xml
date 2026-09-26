@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        The app picker must enumerate every user-installed app. Android 11+
+        package-visibility filtering otherwise hides everything not named in
+        <queries>, which is why only KernelSU and Shizuku used to appear. This
+        is a sideloaded tool, not a Play release.
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />

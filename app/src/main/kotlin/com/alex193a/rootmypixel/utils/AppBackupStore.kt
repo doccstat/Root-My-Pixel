@@ -70,6 +70,10 @@ object AppBackupStore {
     fun hasExtraBackup(context: Context): Boolean =
         File(backupRoot(context), "_extra/data.tgz").isFile
 
+    /** True when the KernelSU/Vector root state holds an archive to restore. */
+    fun hasRootStateBackup(context: Context): Boolean =
+        File(backupRoot(context), "_rootstate/data.tgz").isFile
+
     fun hasBackup(context: Context, packageName: String): Boolean =
         File(backupRoot(context), packageName).isDirectory
 
