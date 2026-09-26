@@ -98,6 +98,16 @@ if [ "$failed" -ne 0 ]; then
     exit 0
 fi
 
+# The KernelSU manager is itself a root app, and the clean state must not keep
+# one installed. Phase 1 reinstalls the bundled, version-matched copy on the
+# next root, so removing it here loses nothing. Best-effort per package: an
+# absent or foreign manager must not block the reboot.
+for manager in me.weishu.kernelsu com.resukisu.resukisu com.sukisu.ultra; do
+    if pm uninstall --user 0 "$manager" >/dev/null 2>&1; then
+        echo "UNROOT_MANAGER_REMOVED:$manager"
+    fi
+done
+
 sync
 echo "UNROOT_CLEANUP_OK"
 if svc power reboot || reboot; then
