@@ -24,6 +24,7 @@ import com.alex193a.rootmypixel.domain.usecase.ResolveTargetUseCase
 import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
 import com.alex193a.rootmypixel.utils.KernelSuInstallChecks
+import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
 import com.alex193a.rootmypixel.utils.TempRootCleanup
@@ -79,7 +80,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 val probe = NativeProbe.run()
                 val deviceInfo = NativeProbe.readDeviceSnapshot()
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
-                if (kernelSuStatus.isActive) {
+                if (KernelSuPresence.isActive(kernelSuStatus)) {
                     val rootTransport = findAvailableRootTransport()
                     mutableState.value = InstallUiState(
                         phase = InstallPhase.Installed,
@@ -91,6 +92,12 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                                 "KernelSU UAPI root-profile grant for this app: " +
                                         kernelSuStatus.appRootGranted,
                             )
+                            if (!kernelSuStatus.isActive) {
+                                appendLine(
+                                    "[i] KernelSU detected through its su grant; " +
+                                            "the legacy UAPI probe did not answer",
+                                )
+                            }
                             append(
                                 rootTransport?.let {
                                     "[+] Unroot root transport verified: ${it.label}"

@@ -22,6 +22,7 @@ import com.alex193a.rootmypixel.domain.usecase.ResolveTargetUseCase
 import com.alex193a.rootmypixel.feature.install.InstallActivity
 import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
+import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
 import com.alex193a.rootmypixel.utils.TempRootCleanup
@@ -120,11 +121,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             mutableUptimeExceeded.value = SystemClock.elapsedRealtime() > UPTIME_THRESHOLD_MS
 
             try {
-                mutableKernelSuInstalled.value = app.packageManager
-                    .getLaunchIntentForPackage("me.weishu.kernelsu") != null
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
+                val kernelSuActive = KernelSuPresence.isActive(kernelSuStatus)
+                mutableKernelSuInstalled.value = kernelSuActive ||
+                    app.packageManager.getLaunchIntentForPackage("me.weishu.kernelsu") != null
                 val probe = NativeProbe.run()
-                if (kernelSuStatus.isActive) {
+                if (kernelSuActive) {
                     val rootTransport = findAvailableRootTransport()
                     mutableState.value = InstallUiState(
                         phase = InstallPhase.Installed,
@@ -136,6 +138,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 "KernelSU UAPI root-profile grant for this app: " +
                                         kernelSuStatus.appRootGranted,
                             )
+                            if (!kernelSuStatus.isActive) {
+                                appendLine(
+                                    "[i] KernelSU detected through its su grant; " +
+                                            "the legacy UAPI probe did not answer",
+                                )
+                            }
                             append(
                                 rootTransport?.let {
                                     "[+] Unroot root transport verified: ${it.label}"
