@@ -12,6 +12,7 @@ class TempRootCleanupTest {
 
         assertTrue(files.contains("/data/local/tmp/cve-2026-43499-app.so"))
         assertTrue(files.contains("/data/local/tmp/ksud-pixel"))
+        assertTrue(files.contains("/data/local/tmp/ksu-manager.apk"))
         assertTrue(files.contains(TempRootCleanup.APEX_SU))
         assertFalse(files.contains("/data/local/tmp/su"))
         assertFalse(files.contains("/data/local/tmp/temp_su.sock"))

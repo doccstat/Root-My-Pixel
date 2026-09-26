@@ -1,7 +1,6 @@
 package com.alex193a.rootmypixel.utils
 
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * Removes the temporary files the exploit leaves behind.
@@ -16,9 +15,6 @@ import java.util.concurrent.TimeUnit
 object TempRootCleanup {
     const val SENTINEL = "RMP_CLEANUP_OK"
 
-    /** KernelSU's su_compat path first, then a plain `su` for other setups. */
-    private val SU_CANDIDATES = listOf("/system/bin/su", "su")
-
     /** The exploit's "adb-visible" su, mounted over the virt apex. */
     const val APEX_SU = "/apex/com.android.virt/bin/su"
 
@@ -26,6 +22,7 @@ object TempRootCleanup {
         "/data/local/tmp/cve-2026-43499-app.so",
         "/data/local/tmp/cve-2026-43499-root",
         "/data/local/tmp/ksud-pixel",
+        "/data/local/tmp/ksu-manager.apk",
         "/data/local/tmp/exploit.log",
         "/data/local/tmp/paint.log",
         "/data/local/tmp/su_daemon.log",
@@ -51,20 +48,8 @@ object TempRootCleanup {
         timeoutSeconds: Long = 10L,
     ): Outcome {
         val command = cleanupCommand(includeTransport)
-
-        for (su in SU_CANDIDATES) {
-            val result = exec(listOf(su, "-c", command), timeoutSeconds)
-            if (result != null && result.output.contains(SENTINEL)) {
-                return Outcome(true, result.output)
-            }
-        }
-        if (helper != null && helper.exists()) {
-            val result = exec(listOf(helper.absolutePath, "-c", command), timeoutSeconds)
-            if (result != null && result.output.contains(SENTINEL)) {
-                return Outcome(true, result.output)
-            }
-        }
-        return Outcome(false, "")
+        val result = RootShell.run(command, helper = helper, timeoutSeconds = timeoutSeconds)
+        return Outcome(result.output.contains(SENTINEL), result.output)
     }
 
     /** The exact shell command handed to KernelSU's `su`. */
@@ -75,18 +60,4 @@ object TempRootCleanup {
     fun files(includeTransport: Boolean): List<String> =
         if (includeTransport) BASE_FILES + TRANSPORT_FILES else BASE_FILES
 
-    private data class CommandResult(val code: Int, val output: String)
-
-    private fun exec(command: List<String>, timeoutSeconds: Long): CommandResult? {
-        val process = runCatching {
-            ProcessBuilder(command).redirectErrorStream(true).start()
-        }.getOrNull() ?: return null
-        val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!finished) {
-            process.destroyForcibly()
-            process.waitFor()
-        }
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        return CommandResult(if (finished) process.exitValue() else 124, output)
-    }
 }
