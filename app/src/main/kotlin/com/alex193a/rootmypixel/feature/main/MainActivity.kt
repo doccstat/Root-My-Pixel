@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
             val uptimeExceeded by installViewModel.uptimeExceeded.collectAsStateWithLifecycle()
             val backupPlan by installViewModel.backupPlan.collectAsStateWithLifecycle()
             val archivedPackages by installViewModel.archivedPackages.collectAsStateWithLifecycle()
+            val extraPaths by installViewModel.extraPaths.collectAsStateWithLifecycle()
 
             RootMyPixelTheme {
                 MainScreen(
@@ -98,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     kernelSuInstalled = kernelSuInstalled,
                     uptimeExceeded = uptimeExceeded,
                     backupCount = backupPlan.size,
+                    extraCount = extraPaths.size,
                     archivedCount = archivedPackages.size,
                     onRefresh = { installViewModel.refresh() },
                     onChooseApps = {
@@ -129,6 +131,7 @@ private fun MainScreen(
     kernelSuInstalled: Boolean,
     uptimeExceeded: Boolean,
     backupCount: Int,
+    extraCount: Int,
     archivedCount: Int,
     onRefresh: () -> Unit,
     onChooseApps: () -> Unit,
@@ -359,10 +362,10 @@ private fun MainScreen(
             ) {
                 Icon(Icons.Rounded.Shield, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = stringResource(R.string.action_choose_apps, backupCount))
+                Text(text = stringResource(R.string.action_choose_apps, backupCount, extraCount))
             }
 
-            if (archivedCount > 0) {
+            if (archivedCount > 0 || extraCount > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = onRestoreApps,

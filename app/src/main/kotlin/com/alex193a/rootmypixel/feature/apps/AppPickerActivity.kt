@@ -83,8 +83,10 @@ class AppPickerActivity : ComponentActivity() {
                             .sortedBy { it.label.lowercase() }
                     },
                     loadSelection = { AppBackupStore.loadPlan(this).toSet() },
-                    onSave = { selected ->
+                    loadExtraPaths = { AppBackupStore.loadExtraPaths(this) },
+                    onSave = { selected, extraPaths ->
                         AppBackupStore.savePlan(this, selected.toList())
+                        AppBackupStore.saveExtraPaths(this, extraPaths)
                         finish()
                     },
                 )
@@ -104,20 +106,23 @@ private data class AppEntry(
 private fun AppPickerScreen(
     loadApps: () -> List<AppEntry>,
     loadSelection: () -> Set<String>,
-    onSave: (Set<String>) -> Unit,
+    loadExtraPaths: () -> List<String>,
+    onSave: (Set<String>, List<String>) -> Unit,
 ) {
     val context = LocalContext.current
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var extraText by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val (loadedApps, loadedSelection) = withContext(Dispatchers.IO) {
-            loadApps() to loadSelection()
+        val (loadedApps, loadedSelection, loadedExtras) = withContext(Dispatchers.IO) {
+            Triple(loadApps(), loadSelection(), loadExtraPaths())
         }
         apps = loadedApps
         selected = loadedSelection
+        extraText = loadedExtras.joinToString("\n")
         loaded = true
     }
 
@@ -208,6 +213,16 @@ private fun AppPickerScreen(
                 }
             }
 
+            OutlinedTextField(
+                value = extraText,
+                onValueChange = { extraText = it },
+                minLines = 2,
+                maxLines = 4,
+                label = { Text(stringResource(R.string.app_picker_extra_dirs)) },
+                supportingText = { Text(stringResource(R.string.app_picker_extra_dirs_hint)) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -219,7 +234,13 @@ private fun AppPickerScreen(
                     Text(stringResource(R.string.app_picker_clear))
                 }
                 Button(
-                    onClick = { onSave(selected) },
+                    onClick = {
+                        onSave(
+                            selected,
+                            extraText.split('\n', ',').map(String::trim)
+                                .filter { it.startsWith("/") && it.length > 1 },
+                        )
+                    },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Rounded.Save, contentDescription = null, modifier = Modifier.size(18.dp))

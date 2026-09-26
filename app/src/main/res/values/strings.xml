@@ -108,14 +108,16 @@
     <string name="uptime_error_message">The phone hasn\'t been rebooted recently. Rebooting your device before installation is recommended to ensure exploit stability.</string>
 
     <!-- Selected-app backup / restore -->
-    <string name="app_picker_title">Apps to back up</string>
-    <string name="app_picker_hint">Selected apps are archived, then removed together with root; the next re-root reinstalls them with their data. Only user-installed apps are listed.</string>
+    <string name="app_picker_title">Apps and directories to back up</string>
+    <string name="app_picker_hint">Selected apps are archived, then removed together with root; the next re-root reinstalls them with their data. Only user-installed apps are listed. Extra directories are archived and removed too, then restored on the next root.</string>
     <string name="app_picker_search">Search</string>
     <string name="app_picker_loading">Loading…</string>
     <string name="app_picker_selected">%1$d selected</string>
     <string name="app_picker_clear">Clear</string>
     <string name="app_picker_save">Save</string>
-    <string name="action_choose_apps">Back up &amp; remove apps (%1$d)</string>
+    <string name="app_picker_extra_dirs">Extra directories</string>
+    <string name="app_picker_extra_dirs_hint">One absolute path per line, e.g. /data/local/tmp/nettest.sh. Paths with spaces are not supported.</string>
+    <string name="action_choose_apps">Back up &amp; remove: %1$d apps · %2$d dirs</string>
     <string name="action_restore_apps">Restore selected apps (%1$d)</string>
     <string name="status_backing_up">Backing up selected apps…</string>
     <string name="status_restoring">Restoring selected apps…</string>

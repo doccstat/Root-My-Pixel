@@ -14,6 +14,7 @@ import java.io.File
  */
 object AppBackupStore {
     private const val PLAN_FILE = "selected_apps.json"
+    private const val EXTRA_PATHS_FILE = "extra_paths.json"
     private const val BACKUP_DIR = "backups"
 
     fun planFile(context: Context): File = File(context.filesDir, PLAN_FILE)
@@ -37,6 +38,37 @@ object AppBackupStore {
         )
         planFile(context).writeText(json.toString())
     }
+
+    fun extraPathsFile(context: Context): File = File(context.filesDir, EXTRA_PATHS_FILE)
+
+    /**
+     * User-specified absolute directories archived and removed alongside the
+     * selected apps. Blank, duplicate and non-absolute entries are dropped;
+     * the engine cannot handle paths with whitespace and neither does this.
+     */
+    fun loadExtraPaths(context: Context): List<String> {
+        val file = extraPathsFile(context)
+        if (!file.exists()) return emptyList()
+        return runCatching {
+            val array = JSONObject(file.readText()).optJSONArray("paths") ?: JSONArray()
+            (0 until array.length())
+                .mapNotNull { array.optString(it).trim().takeIf(String::isNotBlank) }
+                .filter { it.startsWith("/") && it.length > 1 && !it.any(Char::isWhitespace) }
+                .distinct()
+        }.getOrDefault(emptyList())
+    }
+
+    fun saveExtraPaths(context: Context, paths: List<String>) {
+        val json = JSONObject().put(
+            "paths",
+            JSONArray(paths.distinct().sorted()),
+        )
+        extraPathsFile(context).writeText(json.toString())
+    }
+
+    /** True when the extra-directory bucket holds an archive to restore. */
+    fun hasExtraBackup(context: Context): Boolean =
+        File(backupRoot(context), "_extra/data.tgz").isFile
 
     fun hasBackup(context: Context, packageName: String): Boolean =
         File(backupRoot(context), packageName).isDirectory

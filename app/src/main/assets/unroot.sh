@@ -68,6 +68,15 @@ cleanup_step cve-root rm -f /data/local/tmp/cve-2026-43499-root
 cleanup_step ksud rm -f /data/local/tmp/ksud-pixel
 cleanup_step exploit-logs rm -f /data/local/tmp/exploit.log /data/local/tmp/su_daemon.log
 
+# The app's private tree keeps a copy of the payloads, the staged scripts and
+# the install log. None of it is inside /data/adb, so the sweep above misses
+# it; remove it here while keeping files/backups and the plan files, which are
+# the restore source. An unlinked script that is already running still works.
+cleanup_step app-payloads rm -rf /data/data/com.alex193a.rootmypixel/files/payloads
+cleanup_step app-scripts rm -rf /data/data/com.alex193a.rootmypixel/files/scripts
+cleanup_step app-log rm -f /data/data/com.alex193a.rootmypixel/files/exploit.log
+cleanup_step tmp-logs rm -f /data/local/tmp/unr00t.log /data/local/tmp/rt.log*
+
 # A staged virtual-A/B update is applied by the reboot itself: update_engine's
 # CleanupPreviousUpdateAction calls snapshot->InitiateMerge() and the device
 # boots the new build even though nothing was ever "installed". Cancel the state
