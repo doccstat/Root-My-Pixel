@@ -34,9 +34,21 @@
 # before using the network; a single missing class is enough to break DNS or
 # crash netd.
 #
+# The same rules are copied to /data/adb/post-fs-data.d and /data/adb/service.d
+# by Root-My-Pixel, because KernelSU re-runs the module stage scripts on every
+# emulated soft reboot (`ksud soft-reboot`). Common `.d` scripts run before the
+# modules' own scripts in both stages, so the rules are back in place before a
+# module `service.sh` can restart system_server and redo the netd handshake.
+#
+# $KSUD, when set, is tried before the on-disk copies so the script also works
+# in the window between `insmod` and `ksud install`.
+#
 # Emits RMP_NETFIX_OK, or RMP_NETFIX_FAIL:<rule> for the first that failed.
 ksud_bin=""
-for candidate in /data/adb/ksud /data/adb/ksu/bin/ksud ksud; do
+# $KSUD is intentionally unquoted: it is unset when the caller did not stage a
+# ksud binary, and an empty word simply drops out of the list. No braces are
+# used anywhere in this file (see NetfixScriptTest).
+for candidate in $KSUD /data/adb/ksud /data/adb/ksu/bin/ksud ksud; do
     if command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; then
         ksud_bin="$candidate"
         break

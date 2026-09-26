@@ -22,6 +22,7 @@ object TempRootCleanup {
         "/data/local/tmp/cve-2026-43499-app.so",
         "/data/local/tmp/cve-2026-43499-root",
         "/data/local/tmp/ksud-pixel",
+        "/data/local/tmp/kernelsu-payload.ko",
         "/data/local/tmp/ksu-manager.apk",
         "/data/local/tmp/exploit.log",
         "/data/local/tmp/paint.log",
