@@ -27,6 +27,7 @@ import com.alex193a.rootmypixel.utils.KernelSuInstallChecks
 import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
+import com.alex193a.rootmypixel.utils.RootShell
 import com.alex193a.rootmypixel.utils.TempRootCleanup
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
 import com.alex193a.rootmypixel.utils.UnrootIssue
@@ -508,7 +509,74 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         // Package name alone is not a sufficient trust boundary for a root manager.
         registerManager(helper, ksudDest)
 
+        // 6. The driver is bound to the manager's signing certificate and speaks
+        // a versioned UAPI with it, so a separately installed manager can
+        // diverge from the bundled ksud/.ko. Install the manager this build
+        // ships whenever the device has a different (or no) one.
+        installManagerIfNeeded(helper)
+
         appendLog(app.getString(R.string.log_ksu_control_verified))
+    }
+
+    private fun installManagerIfNeeded(helper: File) {
+        val installed = installedManagerVersionCode()
+        if (installed == BUNDLED_MANAGER_VERSION_CODE) {
+            appendLog("[+] KernelSU Manager $installed already installed")
+            return
+        }
+        appendLog(
+            "[*] Installing bundled KernelSU Manager $BUNDLED_MANAGER_VERSION_CODE " +
+                "(device has ${installed ?: "none"})...",
+        )
+        val staged = stageBundledManager(helper)
+        if (staged == null) {
+            appendLog("[!] Could not stage the bundled KernelSU Manager")
+            return
+        }
+        var result = RootShell.run("pm install -r $staged", helper = helper)
+        if (!result.isOk &&
+            SIGNATURE_MISMATCH_MARKERS.any { result.output.contains(it, ignoreCase = true) }
+        ) {
+            appendLog("[!] Installed manager has a different signature; replacing it")
+            RootShell.run("pm uninstall $KERNELSU_PACKAGE", helper = helper)
+            result = RootShell.run("pm install -r $staged", helper = helper)
+        }
+        RootShell.run("rm -f $staged", helper = helper)
+        val now = installedManagerVersionCode()
+        if (result.isOk && now == BUNDLED_MANAGER_VERSION_CODE) {
+            appendLog("[+] KernelSU Manager $now installed")
+        } else {
+            appendLog(
+                "[!] KernelSU Manager install failed (${result.code}): " +
+                    result.output.ifBlank { "no output" }.take(300),
+            )
+        }
+    }
+
+    private fun installedManagerVersionCode(): Long? = runCatching {
+        app.packageManager.getPackageInfo(KERNELSU_PACKAGE, 0).longVersionCode
+    }.getOrNull()
+
+    private fun stageBundledManager(helper: File): String? {
+        val cached = File(app.cacheDir, "ksu-manager.apk")
+        runCatching {
+            app.assets.open(MANAGER_ASSET_PATH).use { input ->
+                cached.outputStream().use { output -> input.copyTo(output) }
+            }
+        }.getOrElse {
+            appendLog("[!] Bundled manager unpack failed: ${it.message}")
+            return null
+        }
+        val staged = STAGED_MANAGER_PATH
+        val copy = RootShell.run(
+            "cp '${cached.absolutePath}' $staged && chmod 644 $staged && chown root:root $staged",
+            helper = helper,
+        )
+        if (!copy.isOk) {
+            appendLog("[!] Bundled manager staging failed: ${copy.output.take(200)}")
+            return null
+        }
+        return staged
     }
 
     private fun verifyKernelSuLoaded(
@@ -1052,6 +1120,15 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
         private val LOG_POLL_INTERVAL = 250.milliseconds
         private const val KERNELSU_PACKAGE = "me.weishu.kernelsu"
+        private const val MANAGER_ASSET_PATH =
+            "manager/KernelSU_v3.3.0_32601-release.apk"
+        private const val BUNDLED_MANAGER_VERSION_CODE = 32601L
+        private const val STAGED_MANAGER_PATH = "/data/local/tmp/ksu-manager.apk"
+        private val SIGNATURE_MISMATCH_MARKERS = listOf(
+            "signatures do not match",
+            "UPDATE_INCOMPATIBLE",
+            "INCONSISTENT_CERTIFICATES",
+        )
         private const val REBOOT_COMMAND =
             "sync; if svc power reboot || reboot; then " +
                     "echo UNROOT_REBOOT_REQUESTED; else echo UNROOT_FAIL:reboot:${'$'}?; fi"
