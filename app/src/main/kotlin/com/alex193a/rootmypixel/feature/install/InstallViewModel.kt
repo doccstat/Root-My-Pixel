@@ -28,6 +28,10 @@ import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
 import com.alex193a.rootmypixel.utils.RootShell
+import com.alex193a.rootmypixel.utils.AppBackupRunner
+import com.alex193a.rootmypixel.utils.AppBackupStore
+import com.alex193a.rootmypixel.utils.AssetScriptRunner
+import com.alex193a.rootmypixel.utils.OtaGuard
 import com.alex193a.rootmypixel.utils.TempRootCleanup
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
 import com.alex193a.rootmypixel.utils.UnrootIssue
@@ -241,6 +245,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 } else {
                     setPhase(InstallPhase.LoadingKernelSu, app.getString(R.string.status_loading_ksu))
                     installKernelSu(payloads)
+                    postRootMaintenance()
 
                     setPhase(InstallPhase.Installed, app.getString(R.string.status_ksu_active))
                     appendLog(app.getString(R.string.log_install_complete))
@@ -757,6 +762,51 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      * enforcing the exploit socket is no longer writable, so the helper must not
      * be the only channel.
      */
+    /**
+     * Runs once the driver is live, before cleanup.
+     *
+     *  - repairs packet traffic: the rooted state keeps SELinux SECMARK checks
+     *    active while no SECMARK rules exist, so every unlabelled packet was
+     *    denied and DNS/app sockets failed ("no internet after rooting"),
+     *  - makes sure no system update can download or merge on the next reboot,
+     *  - reinstalls the apps the previous clean state archived.
+     */
+    private fun postRootMaintenance() {
+        val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+
+        val netfix = AssetScriptRunner.run(app, "netfix.sh", helper = helper, timeoutSeconds = 60L)
+        appendLog(
+            if (netfix.output.contains("RMP_NETFIX_OK")) "[+] Network packet labelling repaired"
+            else "[!] Network packet repair failed: ${netfix.output.trim().take(200)}",
+        )
+
+        val otaBlock = rootCommand(helper, OtaGuard.blockCommand())
+        appendLog(
+            if (otaBlock.output.contains(OtaGuard.BLOCK_OK)) "[+] System updater disabled"
+            else "[!] Updater disable incomplete: ${otaBlock.output.trim().take(200)}",
+        )
+        val otaPurge = rootCommand(helper, OtaGuard.purgeStagedCommand())
+        appendLog(
+            if (otaPurge.output.contains(OtaGuard.PURGE_OK)) "[+] No staged system update present"
+            else "[!] Staged update cleanup incomplete: ${otaPurge.output.trim().take(200)}",
+        )
+
+        val missing = AppBackupStore.restorable(app).filterNot { pkg ->
+            runCatching { app.packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
+        }
+        if (missing.isNotEmpty()) {
+            appendLog("[*] Restoring ${missing.size} backed-up app(s)...")
+            val restored = AppBackupRunner.restore(app, missing, helper)
+            appendLog(
+                "[*] App restore ${restored.summary}" +
+                    if (restored.raw.isBlank()) "" else "\n${restored.raw.trim()}",
+            )
+            restored.failed.forEach { (pkg, reason) ->
+                appendLog("[!] Restore failed: $pkg ($reason)")
+            }
+        }
+    }
+
     private fun rootCommand(helper: File, command: String): CommandResult {
         val result = RootShell.run(command, helper = helper)
         return CommandResult(result.code, result.output)

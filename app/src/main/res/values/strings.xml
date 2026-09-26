@@ -28,7 +28,7 @@
     <string name="action_confirm_unroot">Unroot &amp; Reboot</string>
     <string name="action_cancel">Cancel</string>
     <string name="unroot_dialog_title">Remove root?</string>
-    <string name="unroot_dialog_message">This will remove all temporary exploit files, delete KernelSU data (/data/adb), and reboot your device to fully restore stock kernel state.</string>
+    <string name="unroot_dialog_message">Selected apps are backed up and removed first, then all temporary exploit files are deleted, KernelSU data (/data/adb) is removed, and the device reboots to a clean stock kernel state. The next re-root restores the backed-up apps and their data.</string>
     <string name="unroot_root_access_required">Grant root access to Root My Pixel in KernelSU Manager, or rerun the installation to restore its temporary root shell.</string>
     <string name="status_unrooting">Cleaning up and rebooting…</string>
     <string name="status_unroot_incomplete">Cleanup incomplete — waiting for your decision</string>
@@ -106,4 +106,18 @@
     <!-- Uptime warning -->
     <string name="uptime_error_title">Phone not rebooted</string>
     <string name="uptime_error_message">The phone hasn\'t been rebooted recently. Rebooting your device before installation is recommended to ensure exploit stability.</string>
+
+    <!-- Selected-app backup / restore -->
+    <string name="app_picker_title">Apps to back up</string>
+    <string name="app_picker_hint">Selected apps are archived, then removed together with root; the next re-root reinstalls them with their data. Only user-installed apps are listed.</string>
+    <string name="app_picker_search">Search</string>
+    <string name="app_picker_loading">Loading…</string>
+    <string name="app_picker_selected">%1$d selected</string>
+    <string name="app_picker_clear">Clear</string>
+    <string name="app_picker_save">Save</string>
+    <string name="action_choose_apps">Back up &amp; remove apps (%1$d)</string>
+    <string name="action_restore_apps">Restore selected apps (%1$d)</string>
+    <string name="status_backing_up">Backing up selected apps…</string>
+    <string name="status_restoring">Restoring selected apps…</string>
+    <string name="unroot_issue_backup">Selected app backup</string>
 </resources>

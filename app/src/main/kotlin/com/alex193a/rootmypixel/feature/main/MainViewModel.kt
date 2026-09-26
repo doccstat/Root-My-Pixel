@@ -22,6 +22,8 @@ import com.alex193a.rootmypixel.domain.usecase.ResolveTargetUseCase
 import com.alex193a.rootmypixel.feature.install.InstallActivity
 import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
+import com.alex193a.rootmypixel.utils.AppBackupRunner
+import com.alex193a.rootmypixel.utils.AppBackupStore
 import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
@@ -52,12 +54,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableShizukuAvailable = MutableStateFlow(false)
     private val mutableKernelSuInstalled = MutableStateFlow(false)
     private val mutableUptimeExceeded = MutableStateFlow(false)
+    private val mutableBackupPlan = MutableStateFlow<List<String>>(emptyList())
+    private val mutableArchivedPackages = MutableStateFlow<Set<String>>(emptySet())
     private var refreshJob: Job? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val shizukuAvailable: StateFlow<Boolean> = mutableShizukuAvailable.asStateFlow()
     val kernelSuInstalled: StateFlow<Boolean> = mutableKernelSuInstalled.asStateFlow()
     val uptimeExceeded: StateFlow<Boolean> = mutableUptimeExceeded.asStateFlow()
+
+    /** Packages selected in the app picker, backed up and removed before unroot. */
+    val backupPlan: StateFlow<List<String>> = mutableBackupPlan.asStateFlow()
+
+    /** Packages that currently have an archive on disk. */
+    val archivedPackages: StateFlow<Set<String>> = mutableArchivedPackages.asStateFlow()
 
 
     private val shizukuPermissionHandler = Handler(Looper.getMainLooper())
@@ -74,6 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        reloadBackupState()
         refresh()
     }
 
@@ -119,6 +130,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshJob = viewModelScope.launch(Dispatchers.IO) {
             mutableState.value = InstallUiState(phase = InstallPhase.Checking)
             mutableUptimeExceeded.value = SystemClock.elapsedRealtime() > UPTIME_THRESHOLD_MS
+            reloadBackupState()
 
             try {
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
@@ -347,6 +359,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             appendUnrootLog("[*] Starting verified unroot cleanup...")
 
+            // Archive and remove the selected apps first: the clean state must
+            // not keep any root/root-adjacent package installed.
+            if (!backupAndRemoveSelectedApps()) {
+                showUnrootWarning(listOf(UnrootIssue.Backup))
+                return@launch
+            }
+
             val script = runCatching {
                 app.assets.open("unroot.sh").bufferedReader().use { it.readText() }
             }.getOrElse {
@@ -534,6 +553,101 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             output = process.inputStream.bufferedReader().use { it.readText() }.trim(),
         )
     }
+
+    // --- Selected-app backup and restore ---
+
+    fun reloadBackupState() {
+        mutableBackupPlan.value = AppBackupStore.loadPlan(app)
+        mutableArchivedPackages.value = AppBackupStore.archivedPackages(app)
+    }
+
+    /** Persists the picker selection. */
+    fun setBackupPlan(packages: List<String>) {
+        AppBackupStore.savePlan(app, packages)
+        reloadBackupState()
+    }
+
+    /**
+     * Archives every selected app that is installed and then uninstalls it, so
+     * the clean state has no root-adjacent app left. Returns false — leaving the
+     * device untouched — when an archive could not be produced.
+     */
+    private fun backupAndRemoveSelectedApps(): Boolean {
+        reloadBackupState()
+        val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+        val installed = mutableBackupPlan.value.filter(::isPackageInstalled)
+        if (installed.isEmpty()) {
+            appendUnrootLog("[i] No selected apps installed; skipping app backup")
+            return true
+        }
+
+        mutableState.value = mutableState.value.copy(
+            message = app.getString(R.string.status_backing_up),
+        )
+        appendUnrootLog("[*] Backing up ${installed.size} selected app(s)...")
+        val outcome = AppBackupRunner.backup(app, installed, helper)
+        appendUnrootLog(
+            "[*] App backup ${outcome.summary}" +
+                if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+        )
+        if (!outcome.isComplete) {
+            appendUnrootLog("[!] Aborting unroot: backup incomplete, nothing was removed")
+            return false
+        }
+
+        var removedAll = true
+        for (pkg in installed) {
+            if (!AppBackupStore.hasBackup(app, pkg)) {
+                appendUnrootLog("[!] $pkg has no archive on disk; keeping it installed")
+                removedAll = false
+                continue
+            }
+            val result = runCommand(listOf(KERNEL_SU_PATH, "-c", "pm uninstall $pkg"))
+            appendUnrootLog(
+                if (result.code == 0) "[+] Removed $pkg (archive kept)"
+                else "[!] Could not remove $pkg: ${result.output.take(120)}",
+            )
+        }
+        reloadBackupState()
+        return removedAll
+    }
+
+    /** Reinstalls archived apps that are missing and restores their data. */
+    fun restoreBackedUpApps() {
+        if (mutableState.value.busy) return
+        viewModelScope.launch(Dispatchers.IO) {
+            reloadBackupState()
+            val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+            val targets = AppBackupStore.restorable(app).filterNot(::isPackageInstalled)
+            if (targets.isEmpty()) {
+                appendUnrootLog("[i] Nothing to restore: every archived app is already installed")
+                return@launch
+            }
+            mutableState.value = mutableState.value.copy(
+                message = app.getString(R.string.status_restoring),
+            )
+            appendUnrootLog("[*] Restoring ${targets.size} app(s) from backup...")
+            val outcome = AppBackupRunner.restore(app, targets, helper)
+            appendUnrootLog(
+                "[*] App restore ${outcome.summary}" +
+                    if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
+            )
+            outcome.failed.forEach { (pkg, reason) ->
+                appendUnrootLog("[!] Restore failed: $pkg ($reason)")
+            }
+            mutableState.value = mutableState.value.copy(
+                phase = InstallPhase.Installed,
+                message = app.getString(R.string.status_ksu_active),
+            )
+            reloadBackupState()
+        }
+    }
+
+    private fun isPackageInstalled(packageName: String): Boolean =
+        runCatching {
+            app.packageManager.getPackageInfo(packageName, 0)
+            true
+        }.getOrDefault(false)
 
     private fun showUnrootWarning(issues: List<UnrootIssue>) {
         val outcome = UnrootCommandOutcome(

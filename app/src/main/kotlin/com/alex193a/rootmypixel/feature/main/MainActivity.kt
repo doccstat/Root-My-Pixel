@@ -71,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex193a.rootmypixel.R
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
+import com.alex193a.rootmypixel.feature.apps.AppPickerActivity
 import com.alex193a.rootmypixel.ui.components.UnrootIncompleteSheet
 import com.alex193a.rootmypixel.ui.theme.RootMyPixelTheme
 
@@ -87,6 +88,8 @@ class MainActivity : ComponentActivity() {
             val shizukuAvailable by installViewModel.shizukuAvailable.collectAsStateWithLifecycle()
             val kernelSuInstalled by installViewModel.kernelSuInstalled.collectAsStateWithLifecycle()
             val uptimeExceeded by installViewModel.uptimeExceeded.collectAsStateWithLifecycle()
+            val backupPlan by installViewModel.backupPlan.collectAsStateWithLifecycle()
+            val archivedPackages by installViewModel.archivedPackages.collectAsStateWithLifecycle()
 
             RootMyPixelTheme {
                 MainScreen(
@@ -94,7 +97,13 @@ class MainActivity : ComponentActivity() {
                     shizukuAvailable = shizukuAvailable,
                     kernelSuInstalled = kernelSuInstalled,
                     uptimeExceeded = uptimeExceeded,
+                    backupCount = backupPlan.size,
+                    archivedCount = archivedPackages.size,
                     onRefresh = { installViewModel.refresh() },
+                    onChooseApps = {
+                        startActivity(Intent(this, AppPickerActivity::class.java))
+                    },
+                    onRestoreApps = { installViewModel.restoreBackedUpApps() },
                     onInstall = { installViewModel.install() },
                     onUnroot = { installViewModel.unrootAndReboot() },
                     onCleanup = { installViewModel.cleanupTemporaryFiles() },
@@ -119,7 +128,11 @@ private fun MainScreen(
     shizukuAvailable: Boolean,
     kernelSuInstalled: Boolean,
     uptimeExceeded: Boolean,
+    backupCount: Int,
+    archivedCount: Int,
     onRefresh: () -> Unit,
+    onChooseApps: () -> Unit,
+    onRestoreApps: () -> Unit,
     onInstall: () -> Unit,
     onUnroot: () -> Unit,
     onCleanup: () -> Unit,
@@ -332,6 +345,35 @@ private fun MainScreen(
                     Icon(Icons.Rounded.Bolt, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = stringResource(R.string.action_install))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onChooseApps,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = !state.busy,
+            ) {
+                Icon(Icons.Rounded.Shield, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.action_choose_apps, backupCount))
+            }
+
+            if (archivedCount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onRestoreApps,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    enabled = !state.busy && state.phase == InstallPhase.Installed,
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(R.string.action_restore_apps, archivedCount))
                 }
             }
 

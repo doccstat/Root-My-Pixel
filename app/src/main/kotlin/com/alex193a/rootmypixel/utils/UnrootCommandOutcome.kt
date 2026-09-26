@@ -18,6 +18,7 @@ enum class UnrootIssue(
     ExploitLogs("exploit-logs", R.string.unroot_issue_exploit_logs),
     RootTransportFiles("root-transport-files", R.string.unroot_issue_root_transport_files),
     OtaStaged("ota-", R.string.unroot_issue_ota),
+    Backup("backup", R.string.unroot_issue_backup),
     Reboot("reboot", R.string.unroot_issue_reboot),
     Unknown("unknown", R.string.unroot_issue_unknown),
     ;
@@ -41,6 +42,7 @@ enum class UnrootIssue(
             ExploitLogs,
             RootTransportFiles,
             OtaStaged,
+            Backup,
         )
     }
 }
