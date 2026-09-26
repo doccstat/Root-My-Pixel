@@ -24,6 +24,7 @@ import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
+import com.alex193a.rootmypixel.utils.TempRootCleanup
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
 import com.alex193a.rootmypixel.utils.UnrootIssue
 import kotlinx.coroutines.CancellationException
@@ -201,6 +202,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         app.startActivity(intent)
     }
 
+    /**
+     * Removes the temporary exploit files from /data/local/tmp. Needs the app's
+     * KernelSU root grant; KernelSU's su_compat path is /system/bin/su.
+     */
+    fun cleanupTemporaryFiles() {
+        if (mutableState.value.busy) return
+        viewModelScope.launch(Dispatchers.IO) {
+            appendUnrootLog("[*] Removing temporary exploit files...")
+            val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+            val outcome = TempRootCleanup.run(
+                includeTransport = true,
+                helper = helper,
+                timeoutSeconds = ROOT_PROBE_TIMEOUT_SECONDS,
+            )
+            if (outcome.success) {
+                appendUnrootLog("[+] Removed the temporary exploit files and transport")
+            } else {
+                appendUnrootLog(
+                    "[!] Cleanup needs KernelSU root; grant this app root in the manager",
+                )
+            }
+        }
+    }
+
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
@@ -370,10 +395,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ) outcome else null
         }
 
-        runCatching { runCommand(listOf("su", "-c", script)).output }
-            .getOrNull()
-            ?.let { parseAttempt("su", it) }
-            ?.let { return it }
+        for (su in SU_CANDIDATES) {
+            runCatching { runCommand(listOf(su, "-c", script)).output }
+                .getOrNull()
+                ?.let { parseAttempt(su, it) }
+                ?.let { return it }
+        }
 
         if (helper.exists()) {
             runCatching { runCommand(listOf(helper.absolutePath, "-c", script)).output }
@@ -408,7 +435,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun requestReboot(): Boolean {
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
         val commands = buildList {
-            add(listOf("su", "-c", REBOOT_COMMAND))
+            SU_CANDIDATES.forEach { add(listOf(it, "-c", REBOOT_COMMAND)) }
             if (helper.exists()) add(listOf(helper.absolutePath, "-c", REBOOT_COMMAND))
         }
         commands.forEach { command ->
@@ -435,11 +462,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun findAvailableRootTransport(): RootTransport? {
-        val suResult = runCatching {
-            runCommand(listOf("su", "-c", ROOT_ID_COMMAND), ROOT_PROBE_TIMEOUT_SECONDS)
-        }.getOrNull()
-        if (suResult != null && RootShellProbe.isRoot(suResult.code, suResult.output)) {
-            return RootTransport.AppSu
+        for (su in SU_CANDIDATES) {
+            val suResult = runCatching {
+                runCommand(listOf(su, "-c", ROOT_ID_COMMAND), ROOT_PROBE_TIMEOUT_SECONDS)
+            }.getOrNull()
+            if (suResult != null && RootShellProbe.isRoot(suResult.code, suResult.output)) {
+                return RootTransport.AppSu
+            }
         }
 
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
@@ -529,6 +558,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val COMMAND_TIMEOUT_CODE = 124
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
         private const val ROOT_ID_COMMAND = "id -u"
+        private const val KERNEL_SU_PATH = "/system/bin/su"
+        private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
         private const val REBOOT_COMMAND =

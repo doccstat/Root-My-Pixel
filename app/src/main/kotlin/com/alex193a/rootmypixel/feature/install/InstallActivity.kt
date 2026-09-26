@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
@@ -95,6 +96,7 @@ class InstallActivity : ComponentActivity() {
                         onRetry = { installViewModel.install(profileId, permissiveOnly) },
                         onSoftReboot = { installViewModel.softReboot() },
                         onUnroot = installViewModel::unrootCurrentSession,
+                        onCleanup = installViewModel::cleanupTemporaryFiles,
                         onCancelUnrootReboot = installViewModel::cancelUnrootReboot,
                         onRebootAnyway = installViewModel::continueUnrootReboot,
                         onClose = { finish() },
@@ -146,6 +148,7 @@ private fun InstallScreen(
     onRetry: () -> Unit,
     onSoftReboot: () -> Unit,
     onUnroot: () -> Unit,
+    onCleanup: () -> Unit,
     onCancelUnrootReboot: () -> Unit,
     onRebootAnyway: () -> Unit,
     onClose: () -> Unit,
@@ -314,6 +317,16 @@ private fun InstallScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            }
+                            OutlinedButton(
+                                onClick = onCleanup,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CleaningServices,
+                                    contentDescription = null,
+                                )
+                                Text(stringResource(R.string.action_cleanup_temporary))
                             }
                         }
                     }

@@ -26,6 +26,7 @@ import com.alex193a.rootmypixel.shizuku.IExploitService
 import com.alex193a.rootmypixel.utils.KernelSuInstallChecks
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
+import com.alex193a.rootmypixel.utils.TempRootCleanup
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
 import com.alex193a.rootmypixel.utils.UnrootIssue
 import kotlinx.coroutines.CancellationException
@@ -692,36 +693,34 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Manual cleanup action. Useful when the automatic cleanup could not run
+     * (for example the app only got its KernelSU grant afterwards).
+     */
+    fun cleanupTemporaryFiles() {
+        if (installJob?.isActive == true) return
+        viewModelScope.launch(Dispatchers.IO) {
+            appendLog("[*] Removing temporary exploit files...")
+            cleanupTemporaryArtifacts(includeTransport = true)
+        }
+    }
+
     // KernelSU lives in /data/adb; everything under /data/local/tmp only exists
     // to bootstrap the exploit. Drop the payloads and logs once the driver is
     // loaded, and the exploit transport too once the manager grants this app
     // root (the su/socket pair is the only root path before that grant).
     private fun cleanupTemporaryArtifacts(includeTransport: Boolean) {
-        val files = mutableListOf(
-            "/data/local/tmp/cve-2026-43499-app.so",
-            "/data/local/tmp/cve-2026-43499-root",
-            "/data/local/tmp/ksud-pixel",
-            "/data/local/tmp/exploit.log",
-            "/data/local/tmp/paint.log",
-            "/data/local/tmp/su_daemon.log",
+        val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
+        val outcome = TempRootCleanup.run(
+            includeTransport = includeTransport,
+            helper = helper,
+            timeoutSeconds = ROOT_PROBE_TIMEOUT_SECONDS,
         )
-        if (includeTransport) {
-            files += listOf("/data/local/tmp/su", "/data/local/tmp/temp_su.sock")
-        }
-        val command = "rm -f " + files.joinToString(" ")
-
-        val result = if (includeTransport) {
-            runCatching {
-                runCommand(listOf("su", "-c", command), ROOT_PROBE_TIMEOUT_SECONDS)
-            }.getOrNull()
-        } else {
-            val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
-            if (!helper.exists()) return
-            runCatching { runHelper(helper, "-c", command) }.getOrNull()
-        }
-
-        if (result == null || result.code != 0) {
-            appendLog("[!] Temporary exploit file cleanup was incomplete")
+        if (!outcome.success) {
+            appendLog(
+                "[!] Temporary file cleanup needs KernelSU root; " +
+                    "grant this app root in the manager to enable it",
+            )
             return
         }
         appendLog(
@@ -734,11 +733,13 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun findAvailableRootTransport(): RootTransport? {
-        val suResult = runCatching {
-            runCommand(listOf("su", "-c", ROOT_ID_COMMAND), ROOT_PROBE_TIMEOUT_SECONDS)
-        }.getOrNull()
-        if (suResult != null && RootShellProbe.isRoot(suResult.code, suResult.output)) {
-            return RootTransport.AppSu
+        for (su in SU_CANDIDATES) {
+            val suResult = runCatching {
+                runCommand(listOf(su, "-c", ROOT_ID_COMMAND), ROOT_PROBE_TIMEOUT_SECONDS)
+            }.getOrNull()
+            if (suResult != null && RootShellProbe.isRoot(suResult.code, suResult.output)) {
+                return RootTransport.AppSu
+            }
         }
 
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
@@ -1038,6 +1039,8 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val COMMAND_TIMEOUT_CODE = 124
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
         private const val ROOT_ID_COMMAND = "id -u"
+        private const val KERNEL_SU_PATH = "/system/bin/su"
+        private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
         private val LOG_POLL_INTERVAL = 250.milliseconds

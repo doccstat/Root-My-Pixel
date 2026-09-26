@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.OpenInBrowser
@@ -96,6 +97,7 @@ class MainActivity : ComponentActivity() {
                     onRefresh = { installViewModel.refresh() },
                     onInstall = { installViewModel.install() },
                     onUnroot = { installViewModel.unrootAndReboot() },
+                    onCleanup = { installViewModel.cleanupTemporaryFiles() },
                     onCancelUnrootReboot = installViewModel::cancelUnrootReboot,
                     onRebootAnyway = installViewModel::continueUnrootReboot,
                     onExportLog = { installViewModel.exportLog() },
@@ -120,6 +122,7 @@ private fun MainScreen(
     onRefresh: () -> Unit,
     onInstall: () -> Unit,
     onUnroot: () -> Unit,
+    onCleanup: () -> Unit,
     onCancelUnrootReboot: () -> Unit,
     onRebootAnyway: () -> Unit,
     onExportLog: () -> Unit,
@@ -330,6 +333,20 @@ private fun MainScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = stringResource(R.string.action_install))
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onCleanup,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = !state.busy,
+            ) {
+                Icon(Icons.Rounded.CleaningServices, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.action_cleanup_temporary))
             }
 
             Spacer(modifier = Modifier.height(12.dp))
