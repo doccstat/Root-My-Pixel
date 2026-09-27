@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Memory
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -278,6 +279,16 @@ private fun InstallScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(stringResource(R.string.action_done))
+                            }
+                            OutlinedButton(
+                                onClick = onSoftReboot,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = null,
+                                )
+                                Text(stringResource(R.string.action_soft_reboot))
                             }
                             if (installState.canUnrootCurrentSession) {
                                 Button(
