@@ -24,9 +24,9 @@ ls src/targets/
 
 2. **Root daemon** — spawns via `call_usermodehelper`
    - Listens on Unix socket for commands
-   - Launches `ksud late-load` to install KernelSU
+   - Launches `ksud late-load` to install ReSukiSU
 
-3. **KernelSU late-load** — uses vanilla KernelSU
+3. **KernelSU late-load** — uses vanilla ReSukiSU
    - Loads via standard `init_module` syscall
    - Verified via ioctl on `/dev/kernelsu`
 

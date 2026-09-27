@@ -1,12 +1,12 @@
 # Root My Pixel
 
-**Root My Pixel** is an Android application designed to automate root access on **Google Pixel** devices leveraging the **NebuSec IonStack** exploit (CVE-2026-43499) and integrating **KernelSU**.
+**Root My Pixel** is an Android application designed to automate root access on **Google Pixel** devices leveraging the **NebuSec IonStack** exploit (CVE-2026-43499) and integrating **ReSukiSU / KernelSU**.
 
 ---
 
 ## How the Application Works
 
-Root My Pixel lets you *temporarily* gain root access with KernelSU in just one tap.
+Root My Pixel lets you *temporarily* gain root access with ReSukiSU in just one tap.
 
 ### Installation Workflow
 
@@ -22,11 +22,11 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
    - Precompiled binary payloads (`.so`) corresponding to each supported build and the native helper tool (`libcve43499root.so`) are extracted from APK assets to `/data/local/tmp`.
    - The IonStack exploit (CVE-2026-43499) is executed to establish a local root daemon socket (`temp_su.sock`), acquiring full `root` privileges.
 
-4. **KernelSU Integration**
+4. **KernelSU / ReSukiSU Integration**
    - Staging of the `ksud` binary matching the device's Kernel Module Interface (KMI, e.g., `android15-6.6`).
    - The app triggers the KernelSU **late-load** mechanism (`ksud late-load --kmi <kmi>`).
    - Verifies KernelSU through its UAPI, with `ksud debug info` and `/proc/modules` as compatibility fallbacks.
-   - Registers the installed KernelSU Manager only after validating its production APK signature.
+   - Registers the installed ReSukiSU Manager only after validating its production APK signature.
 
 5. **User Interface & Management Tools**
    - Real-time live log progress monitoring.
@@ -70,7 +70,7 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
 
 1. A supported Google Pixel device listed in the table above.
 2. **Shizuku** installed and running via ADB (`adb shell sh /sdcard/Android/data/rikka.shizuku/starter.sh` or Wireless Debugging).
-3. **KernelSU Manager** installed on the device to manage root permissions granted to apps.
+3. **ReSukiSU Manager** installed on the device to manage root permissions granted to apps.
 
 ---
 
@@ -106,4 +106,4 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 - Exploit: [NebuSec IonStack](https://github.com/NebuSec/CyberMeowfia)
 - App architecture: Inspired and adapted from [Root My Galaxy](https://github.com/BuSung-dev/Root-My-Galaxy)
-- KernelSU (https://github.com/tiann/KernelSU)
+- ReSukiSU (https://github.com/ReSukiSU/ReSukiSU)

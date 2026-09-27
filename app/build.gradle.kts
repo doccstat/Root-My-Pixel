@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.lixingchi.ghostlock"
+    namespace = "com.alex193a.rootmypixel"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.lixingchi.ghostlock"
+        applicationId = "com.alex193a.rootmypixel"
         minSdk = 33
         targetSdk = 36
         versionCode = 6

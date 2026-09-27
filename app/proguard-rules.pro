@@ -18,5 +18,5 @@
 }
 
 # Keep domain models used in reflection
--keep class com.lixingchi.ghostlock.domain.model.** { *; }
--keep class com.lixingchi.ghostlock.data.model.** { *; }
+-keep class com.alex193a.rootmypixel.domain.model.** { *; }
+-keep class com.alex193a.rootmypixel.data.model.** { *; }
