@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     onRestoreOnRootChange = installViewModel::setRestoreOnRoot,
                     onInstall = { installViewModel.install() },
                     onUnroot = { installViewModel.unrootAndReboot() },
+                    onSoftReboot = { installViewModel.softReboot() },
                     onCleanup = { installViewModel.cleanupTemporaryFiles() },
                     onCancelUnrootReboot = installViewModel::cancelUnrootReboot,
                     onRebootAnyway = installViewModel::continueUnrootReboot,
@@ -146,6 +147,7 @@ private fun MainScreen(
     onRestoreOnRootChange: (Boolean) -> Unit,
     onInstall: () -> Unit,
     onUnroot: () -> Unit,
+    onSoftReboot: () -> Unit,
     onCleanup: () -> Unit,
     onCancelUnrootReboot: () -> Unit,
     onRebootAnyway: () -> Unit,
@@ -398,6 +400,18 @@ private fun MainScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onSoftReboot,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    enabled = !state.busy,
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(R.string.action_soft_reboot))
                 }
             } else {
                 Button(
