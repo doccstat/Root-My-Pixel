@@ -142,13 +142,13 @@ static void get_prop(const char *key, char *buf, size_t size) {
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_alex193a_rootmypixel_utils_NativeProbe_isKernelSuActiveNative(
+Java_com_lixingchi_ghostlock_utils_NativeProbe_isKernelSuActiveNative(
         JNIEnv *env __attribute__((unused)), jobject thiz __attribute__((unused))) {
     return check_kernelsu_active() ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_alex193a_rootmypixel_utils_NativeProbe_getKernelSuInfoNative(
+Java_com_lixingchi_ghostlock_utils_NativeProbe_getKernelSuInfoNative(
         JNIEnv *env, jobject thiz __attribute__((unused))) {
     struct ksu_probe_result result;
     int probe_ok = get_kernelsu_info(&result);
@@ -161,7 +161,7 @@ Java_com_alex193a_rootmypixel_utils_NativeProbe_getKernelSuInfoNative(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_alex193a_rootmypixel_utils_NativeProbe_run(
+Java_com_lixingchi_ghostlock_utils_NativeProbe_run(
     JNIEnv *env, jobject thiz __attribute__((unused))) {
 
     char output[4096];

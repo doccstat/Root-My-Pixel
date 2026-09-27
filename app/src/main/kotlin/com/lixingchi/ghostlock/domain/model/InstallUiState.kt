@@ -1,0 +1,31 @@
+package com.lixingchi.ghostlock.domain.model
+
+data class InstallUiState(
+    val phase: InstallPhase = InstallPhase.Checking,
+    val message: String = "",
+    val probeOutput: String = "",
+    val log: String = "",
+    /** True when this app has a verified app-su or current-install CVE root transport. */
+    val canUnrootCurrentSession: Boolean = false,
+    /** Non-null while unroot is paused waiting for an explicit reboot decision. */
+    val unrootWarning: UnrootWarningUi? = null,
+    /**
+     * True after a root-state restore, which KernelSU only fully applies after
+     * a real reboot (the in-memory allowlist is not re-read on a soft restart).
+     */
+    val rebootAfterRestore: Boolean = false,
+    /** False for deterministic/terminal failures such as ROUTE_DISABLED. */
+    val retryAllowed: Boolean = true,
+) {
+    val busy: Boolean
+        get() = phase in setOf(
+            InstallPhase.Checking,
+            InstallPhase.Downloading,
+            InstallPhase.Exploiting,
+            InstallPhase.LoadingKernelSu,
+        )
+}
+
+data class UnrootWarningUi(
+    val failedItemsText: String,
+)
