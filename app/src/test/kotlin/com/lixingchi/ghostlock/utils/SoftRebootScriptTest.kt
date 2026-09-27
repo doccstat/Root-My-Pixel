@@ -7,24 +7,41 @@ class SoftRebootScriptTest {
     private val script = SoftReboot.buildScript()
 
     @Test
-    fun restartsTheComposerBeforeKsudSoftReboot() {
-        val composer = script.indexOf("setprop ctl.restart")
-        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
-        assertTrue("expected a composer restart in the script", composer >= 0)
-        assertTrue("expected a ksud soft-reboot in the script", ksud >= 0)
-        // A composer restart after a fresh soft reboot crash-loops the framework
-        // and RescueParty reboots the device, so the order must not flip.
+    fun neverRestartsTheComposer() {
+        // A composer restart while the framework is settling is what escalated
+        // to a RescueParty/recovery boot, and the panel is now re-driven with
+        // `cmd display power-reset` instead.
         assertTrue(
-            "the composer restart must come first",
-            composer < ksud,
+            "the soft reboot must not restart the composer HAL",
+            script.indexOf("setprop ctl.restart") == -1,
         )
     }
 
     @Test
-    fun waitsForTheFrameworkBeforeEachStage() {
+    fun softRebootsThroughKsud() {
+        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
+        assertTrue("expected a ksud soft-reboot in the script", ksud >= 0)
+    }
+
+    @Test
+    fun waitsForTheFrameworkAfterKsud() {
         val waits = script.split("sys.boot_completed").size - 1
-        assertTrue("expected a boot_completed wait before and after ksud", waits >= 2)
+        assertTrue("expected a boot_completed guard and wait", waits >= 2)
         assertTrue(script.indexOf("sys.boot_completed") < script.indexOf("soft-reboot"))
+    }
+
+    @Test
+    fun abortsWhenTheFrameworkIsNotUp() {
+        assertTrue(script.contains("framework is not up"))
+        assertTrue(script.contains("exit 1"))
+    }
+
+    @Test
+    fun refusesToRunAgainTooSoon() {
+        // Two soft reboots close together wedged the boot: the second one ran
+        // while the framework was still settling from the first.
+        assertTrue(script.contains(SoftReboot.LOCK_PATH))
+        assertTrue(script.contains(SoftReboot.MIN_INTERVAL_SECONDS.toString()))
     }
 
     @Test
@@ -56,8 +73,7 @@ class SoftRebootScriptTest {
     }
 
     @Test
-    fun fallsBackWhenKsudOrTheComposerIsMissing() {
-        assertTrue(script.contains("killall -9 system_server"))
+    fun toleratesAMissingKsud() {
         assertTrue(script.contains("not found"))
     }
 }
