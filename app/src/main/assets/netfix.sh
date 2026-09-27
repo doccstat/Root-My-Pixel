@@ -10,6 +10,8 @@
 #   packet  send/recv  - DNS/DoT egress and replies  (netd, apps, kernel)
 #   netif   ingress/egress - per-interface checks    (netd, system_server, kernel)
 #   node    sendto/recvfrom - address-based checks   (netd, imsstack_app)
+#   peer    recv       - per-socket peer label check on the receive path
+#                        (netd DNS replies, system_server mDNS)
 #
 # The `node` denial is the dangerous one: netd's libnetd_updatable_init opens a
 # loopback socket, the connect is denied and it reports
@@ -69,7 +71,8 @@ for rule in \
     'allow domain node node sendto' \
     'allow domain node node recvfrom' \
     'allow unlabeled node node sendto' \
-    'allow unlabeled node node recvfrom' ; do
+    'allow unlabeled node node recvfrom' \
+    'allow domain unlabeled peer recv' ; do
     if ! "$ksud_bin" sepolicy patch "$rule" >/dev/null 2>&1; then
         echo "RMP_NETFIX_FAIL:$rule"
         exit 1
