@@ -1007,6 +1007,13 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     // loaded, and the exploit transport too once the manager grants this app
     // root (the su/socket pair is the only root path before that grant).
     private fun cleanupTemporaryArtifacts(includeTransport: Boolean) {
+        // The app-private payload/script copies are deleted with this app's own
+        // uid: that path always works, even when the KernelSU su domain cannot
+        // unlink MLS-categorised app data or when root was never granted.
+        val purged = TempRootCleanup.purgeAppArtifacts(app)
+        if (purged.isNotEmpty()) {
+            appendLog("[+] Removed app-private leftovers: ${purged.joinToString()}")
+        }
         val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
         val outcome = TempRootCleanup.run(
             includeTransport = includeTransport,
