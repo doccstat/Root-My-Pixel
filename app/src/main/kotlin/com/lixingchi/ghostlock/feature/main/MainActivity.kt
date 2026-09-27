@@ -288,17 +288,24 @@ private fun MainScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Uptime status
-            UptimeErrorCard(exceeded = uptimeExceeded)
+            // The reboot hint and the Shizuku hint are both prerequisites for
+            // running the exploit. Once KernelSU is loaded there is nothing to
+            // install, so showing either would be false alarm noise.
+            val rootActive = state.phase == InstallPhase.Installed
 
-            if (uptimeExceeded) {
+            // Uptime status
+            if (uptimeExceeded && !rootActive) {
+                UptimeErrorCard(exceeded = true)
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             // Shizuku status
-            ShizukuStatusCard(available = shizukuAvailable)
+            if (!rootActive) {
+                ShizukuStatusCard(available = shizukuAvailable)
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
 
             // KernelSU Manager status
             KernelSuManagerCard(
