@@ -18,6 +18,17 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun containsNoSingleQuoteToBreakTheShCWrapper() {
+        // SoftReboot.launch embeds this script inside `sh -c '...'`, so any
+        // single quote in the script (a `tr '\n'` or a `case ... in ''`) ends
+        // the wrapper early and the whole script dies with a shell parse error.
+        assertTrue(
+            "the generated script must not contain a single quote",
+            !script.contains("'"),
+        )
+    }
+
+    @Test
     fun softRebootsThroughKsud() {
         val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
         assertTrue("expected a ksud soft-reboot in the script", ksud >= 0)
