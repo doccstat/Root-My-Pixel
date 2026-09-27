@@ -26,12 +26,21 @@ import java.io.File
  *    soft-reboot crash-loops `system_server` and RescueParty reboots the
  *    device (`sys.boot.reason=reboot,rescueparty`).
  *
- * 3. A plain sleep/wake cycle. `ksud soft-reboot`'s `stop`/`start` leaves the
- *    display power state stale (SurfaceFlinger draws while the panel sits at
- *    DPMS off, so the screen looks black). A `KEYCODE_SLEEP`/`KEYCODE_WAKEUP`
- *    pair makes SurfaceFlinger re-apply display power. This is deliberately a
- *    DPMS toggle and not a second composer restart: a second framework restart
- *    this soon is what triggered the RescueParty reboot above.
+ * 3. Re-initialise the panel, then a sleep/wake cycle.
+ *
+ *    The userspace restart in step 2 does not reset the DSI/DPU pipeline, so
+ *    the cover panel keeps whatever DPMS/PSR state it had while the display
+ *    stack was torn down. That is the three-dot cover-panel artifact and the
+ *    black screen: SurfaceFlinger comes back but the panel is never re-driven.
+ *
+ *    Step 1's composer restart fixes that, but it runs *before* step 2, and
+ *    step 2 stales the panel again. So the panel is re-initialised once more at
+ *    the end with `cmd display power-reset <id>` for every connected display.
+ *    `power-reset` asks SurfaceFlinger to drive the panel back to the power
+ *    state it should have, without restarting the composer - the second
+ *    framework restart that would trigger the RescueParty reboot above. The
+ *    `KEYCODE_SLEEP`/`KEYCODE_WAKEUP` pair afterwards stays as a belt-and-braces
+ *    DPMS toggle for any build where `cmd display` is unavailable.
  *
  * Every step kills the framework (and therefore this app), so the work runs in
  * a detached `setsid` shell rather than in the app process.
@@ -76,6 +85,10 @@ object SoftReboot {
         "  sleep 1",
         "done",
         "sleep 10",
+        "echo \"[*] soft reboot: re-initialising panel power\"",
+        "for id in \$(cmd display get-displays --ids-only 2>/dev/null); do",
+        "  cmd display power-reset \"\$id\" >/dev/null 2>&1",
+        "done",
         "echo \"[*] soft reboot: re-lighting display\"",
         "input keyevent KEYCODE_SLEEP",
         "sleep 2",

@@ -42,6 +42,20 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun reInitialisesPanelPowerAfterKsud() {
+        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
+        val reset = script.indexOf("cmd display power-reset")
+        assertTrue("expected a panel power reset", reset >= 0)
+        // `ksud soft-reboot` stales the panel, so the reset has to run after it
+        // (and it must be a power-reset, not another composer restart).
+        assertTrue("panel power reset must follow ksud", reset > ksud)
+        assertTrue(
+            "power reset must enumerate the connected displays",
+            script.contains("get-displays --ids-only"),
+        )
+    }
+
+    @Test
     fun fallsBackWhenKsudOrTheComposerIsMissing() {
         assertTrue(script.contains("killall -9 system_server"))
         assertTrue(script.contains("not found"))
