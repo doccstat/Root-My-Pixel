@@ -24,6 +24,7 @@ import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShellProbe
+import com.alex193a.rootmypixel.utils.SoftRebootCommand
 import com.alex193a.rootmypixel.utils.UnrootCommandOutcome
 import com.alex193a.rootmypixel.utils.UnrootIssue
 import kotlinx.coroutines.CancellationException
@@ -210,7 +211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val result = runCatching {
                     val process = ProcessBuilder(
                         helper.absolutePath, "-c",
-                        "killall -9 system_server 2>/dev/null; true"
+                        SoftRebootCommand.RESTART_DISPLAY_STACK
                     ).redirectErrorStream(true).start()
                     process.inputStream.bufferedReader().use { it.readText() }
                     process.waitFor()
