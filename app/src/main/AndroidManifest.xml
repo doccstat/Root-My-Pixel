@@ -14,7 +14,7 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <queries>
-        <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="com.lixingchi.shizuku" />
         <package android:name="me.weishu.kernelsu" />
     </queries>
 
