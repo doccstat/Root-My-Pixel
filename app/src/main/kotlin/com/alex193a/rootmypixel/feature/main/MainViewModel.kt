@@ -239,6 +239,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (mutableState.value.busy) return
         viewModelScope.launch(Dispatchers.IO) {
             appendUnrootLog("[*] Removing temporary exploit files...")
+            // Works without root: the staged copies live in this app's own
+            // private storage, so they must not depend on the su grant.
+            val purged = TempRootCleanup.purgeAppArtifacts(app)
+            if (purged.isNotEmpty()) {
+                appendUnrootLog("[+] Removed app-private leftovers: ${purged.joinToString()}")
+            }
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
             val outcome = TempRootCleanup.run(
                 includeTransport = true,
@@ -249,7 +255,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendUnrootLog("[+] Removed the temporary exploit files and transport")
             } else {
                 appendUnrootLog(
-                    "[!] Cleanup needs KernelSU root; grant this app root in the manager",
+                    "[!] Remaining /data/local/tmp cleanup needs KernelSU root; " +
+                        "grant this app root in the manager",
                 )
             }
         }
@@ -386,6 +393,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val outcome = executeUnrootScript(script)
+            // The unroot shell runs in the KernelSU domain, which can be denied
+            // unlink on this app's MLS-categorised data dir. Delete the staged
+            // payloads/scripts as the app itself so they never outlive the
+            // exploit regardless of which steps reported OK.
+            val purged = TempRootCleanup.purgeAppArtifacts(app)
+            if (purged.isNotEmpty()) {
+                appendUnrootLog("[+] Removed app-private leftovers: ${purged.joinToString()}")
+            }
             if (outcome.cleanupComplete && outcome.rebootRequested) {
                 appendUnrootLog("[+] Cleanup complete; reboot requested")
                 delay(3000.milliseconds)
@@ -429,6 +444,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         fun parseAttempt(transport: String, output: String): UnrootCommandOutcome? {
             val outcome = UnrootCommandOutcome.parse(output)
             appendUnrootLog("[*] $transport output:\n${output.ifBlank { "no output" }}")
+            persistUnrootOutput(transport, output)
             return if (outcome.cleanupComplete ||
                 (outcome.hasStructuredOutput && !outcome.transportUnavailable)
             ) outcome else null
@@ -469,6 +485,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             issues = UnrootIssue.affectedByMissingTransport,
             hasStructuredOutput = true,
         )
+    }
+
+    /**
+     * Keeps the raw unroot output on disk so a failed or truncated cleanup can
+     * still be diagnosed after the reboot wipes the in-memory log.
+     */
+    private fun persistUnrootOutput(transport: String, output: String) {
+        runCatching {
+            val log = File(app.filesDir, UNROOT_LOG_FILE)
+            log.appendText(
+                "\n===== $transport @ ${System.currentTimeMillis()} =====\n" +
+                    output.ifBlank { "no output" } + "\n",
+            )
+        }
     }
 
     private fun requestReboot(): Boolean {
@@ -788,6 +818,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
         private const val ROOT_ID_COMMAND = "id -u"
         private const val KERNEL_SU_PATH = "/system/bin/su"
+        private const val UNROOT_LOG_FILE = "unroot.log"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"

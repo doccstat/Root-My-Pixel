@@ -81,10 +81,14 @@ object AppBackupStore {
     fun restorable(context: Context): List<String> =
         loadPlan(context).filter { hasBackup(context, it) }
 
-    /** Packages that already have an archive, in storage order. */
+    /**
+     * Packages that already have an archive, in storage order. The `_`-prefixed
+     * buckets (`_rootstate`, `_extra`) hold KernelSU/Vector state, not apps, so
+     * they must not be counted or listed as restorable packages.
+     */
     fun archivedPackages(context: Context): Set<String> =
         backupRoot(context).listFiles()
-            ?.filter { it.isDirectory }
+            ?.filter { it.isDirectory && !it.name.startsWith('_') }
             ?.map { it.name }
             ?.toSet()
             ?: emptySet()

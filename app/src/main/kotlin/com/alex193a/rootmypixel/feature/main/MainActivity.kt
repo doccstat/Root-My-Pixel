@@ -410,6 +410,14 @@ private fun MainScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = stringResource(R.string.action_restore_apps, archivedCount))
                 }
+                if (state.phase != InstallPhase.Installed) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.restore_requires_root),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

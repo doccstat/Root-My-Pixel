@@ -17,9 +17,19 @@ enum class UnrootIssue(
     KernelSuLoader("ksud", R.string.unroot_issue_ksud),
     ExploitLogs("exploit-logs", R.string.unroot_issue_exploit_logs),
     RootTransportFiles("root-transport-files", R.string.unroot_issue_root_transport_files),
+    AppPayloads("app-payloads", R.string.unroot_issue_app_payloads),
+    AppScripts("app-scripts", R.string.unroot_issue_app_scripts),
+    AppLog("app-log", R.string.unroot_issue_app_log),
+    TempLogs("tmp-logs", R.string.unroot_issue_tmp_logs),
     OtaStaged("ota-", R.string.unroot_issue_ota),
     Backup("backup", R.string.unroot_issue_backup),
     Reboot("reboot", R.string.unroot_issue_reboot),
+    /**
+     * The root shell that runs the unroot steps disappeared before the script
+     * reached its `UNROOT_CLEANUP_OK` / `UNROOT_CLEANUP_PARTIAL` terminator.
+     * Nothing can be asserted about the steps that never reported.
+     */
+    Incomplete("incomplete", R.string.unroot_issue_incomplete),
     Unknown("unknown", R.string.unroot_issue_unknown),
     ;
 
@@ -74,9 +84,17 @@ data class UnrootCommandOutcome(
                 .toList()
 
             val transportUnavailable = output.contains(TRANSPORT_UNAVAILABLE)
+            val structured = output.contains(MARKER_PREFIX)
+            val finished = output.contains(CLEANUP_OK) ||
+                output.contains(CLEANUP_PARTIAL) ||
+                transportUnavailable
             val parsedIssues = buildList {
                 addAll(issues)
                 if (transportUnavailable) addAll(UnrootIssue.affectedByMissingTransport)
+                // The root shell started the unroot steps but never reached a
+                // terminator: report that explicitly instead of leaving the UI
+                // to guess "could not be verified" from an empty failure list.
+                if (structured && !finished) add(UnrootIssue.Incomplete)
             }.distinct()
 
             return UnrootCommandOutcome(
@@ -92,6 +110,7 @@ data class UnrootCommandOutcome(
         private const val FAILURE_PREFIX = "UNROOT_FAIL:"
         private const val TRANSPORT_UNAVAILABLE = "UNROOT_TRANSPORT_UNAVAILABLE"
         private const val CLEANUP_OK = "UNROOT_CLEANUP_OK"
+        private const val CLEANUP_PARTIAL = "UNROOT_CLEANUP_PARTIAL"
         private const val REBOOT_REQUESTED = "UNROOT_REBOOT_REQUESTED"
     }
 }

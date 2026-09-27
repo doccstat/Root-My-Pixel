@@ -60,11 +60,48 @@ class UnrootCommandOutcomeTest {
     }
 
     @Test
-    fun parse_treatsTheStagedUpdateMarkerAsInformational() {
-        val outcome = UnrootCommandOutcome.parse("UNROOT_OTA_STAGED:1")
+    fun parse_mapsAppStorageCleanupFailuresToTheirOwnIssues() {
+        val outcome = UnrootCommandOutcome.parse(
+            """
+            UNROOT_FAIL:app-payloads:1
+            UNROOT_FAIL:app-scripts:1
+            UNROOT_FAIL:tmp-logs:1
+            UNROOT_CLEANUP_PARTIAL
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                UnrootIssue.AppPayloads,
+                UnrootIssue.AppScripts,
+                UnrootIssue.TempLogs,
+            ),
+            outcome.issues,
+        )
+    }
+
+    @Test
+    fun parse_flagsATruncatedRootShellAsIncomplete() {
+        val outcome = UnrootCommandOutcome.parse(
+            """
+            UNROOT_IDENTITY:uid=0:context=u:r:ksu:s0
+            UNROOT_OK:data-adb
+            UNROOT_OK:selinux
+            """.trimIndent(),
+        )
+
+        assertFalse(outcome.cleanupComplete)
+        assertEquals(listOf(UnrootIssue.Incomplete), outcome.issues)
+    }
+
+    @Test
+    fun parse_treatsAFinishedRunWithOnlyTheStagedMarkerAsInformational() {
+        val outcome = UnrootCommandOutcome.parse(
+            "UNROOT_OTA_STAGED:0\nUNROOT_CLEANUP_OK",
+        )
 
         assertTrue(outcome.issues.isEmpty())
         assertTrue(outcome.hasStructuredOutput)
-        assertFalse(outcome.cleanupComplete)
+        assertTrue(outcome.cleanupComplete)
     }
 }

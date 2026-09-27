@@ -1,5 +1,6 @@
 package com.alex193a.rootmypixel.utils
 
+import android.content.Context
 import java.io.File
 
 /**
@@ -86,5 +87,32 @@ object TempRootCleanup {
 
     fun files(includeTransport: Boolean): List<String> =
         if (includeTransport) BASE_FILES + TRANSPORT_FILES else BASE_FILES
+
+    /**
+     * Deletes the exploit copies this app keeps inside its own private files
+     * directory. This runs as the app's own uid: the KernelSU `su` domain may
+     * be denied unlink on another app's MLS-categorised data dir, so the root
+     * shell's `app-payloads` / `app-scripts` / `app-log` steps are not
+     * trustworthy. Never touches the restore sources (`backups/`,
+     * `selected_apps.json`, `extra_paths.json`).
+     *
+     * @return the names that were removed, for logging.
+     */
+    fun purgeAppArtifacts(context: Context): List<String> {
+        val targets = listOf(
+            File(context.filesDir, "payloads"),
+            File(context.filesDir, "scripts"),
+            File(context.filesDir, "exploit.log"),
+        )
+        val removed = mutableListOf<String>()
+        for (target in targets) {
+            val existed = target.exists()
+            val gone = runCatching {
+                if (target.isDirectory) target.deleteRecursively() else target.delete()
+            }.getOrDefault(false)
+            if (existed && (gone || !target.exists())) removed += target.name
+        }
+        return removed
+    }
 
 }
