@@ -74,10 +74,15 @@ backup_one() {
     fi
 
     uid="$(stat -c %u "/data/data/$pkg" 2>/dev/null || echo 0)"
+    disabled=0
+    if pm list packages -d --user 0 2>/dev/null | grep -qx "package:$pkg"; then
+        disabled=1
+    fi
     {
         echo "pkg=$pkg"
         echo "uid=$uid"
         echo "apks=$n"
+        echo "disabled=$disabled"
         echo "stamp=$(date +%s)"
     } > "$dir/meta.txt" 2>/dev/null
 
@@ -89,6 +94,13 @@ backup_one() {
         | grep 'granted=true' \
         | sed 's/^ *//; s/:.*//' \
         > "$dir/permissions.txt" 2>/dev/null
+
+    # AppOps state (notification mode, background restrictions and every other
+    # per-op override) is system state too. The first line of `appops get`
+    # carries a "Uid mode: " prefix that is not an op name, so strip it.
+    cmd appops get "$pkg" 2>/dev/null \
+        | sed 's/^ *//; s/^Uid mode: //' \
+        > "$dir/appops.txt" 2>/dev/null
 
     echo "RMP_BK_OK:$pkg"
     return 0
@@ -132,6 +144,25 @@ restore_one() {
             [ -n "$perm" ] || continue
             pm grant "$pkg" "$perm" >/dev/null 2>&1
         done < "$dir/permissions.txt"
+    fi
+
+    if [ -f "$dir/appops.txt" ]; then
+        while IFS= read -r line; do
+            op="${line%%:*}"
+            mode="${line#*:}"
+            mode="${mode%%;*}"
+            mode="$(printf '%s' "$mode" | tr -d ' ')"
+            case "$mode" in
+                allow|ignore|deny|default|foreground) ;;
+                *) continue ;;
+            esac
+            [ -n "$op" ] || continue
+            cmd appops set "$pkg" "$op" "$mode" >/dev/null 2>&1
+        done < "$dir/appops.txt"
+    fi
+
+    if grep -q '^disabled=1$' "$dir/meta.txt" 2>/dev/null; then
+        pm disable-user --user 0 "$pkg" >/dev/null 2>&1
     fi
 
     echo "RMP_RS_OK:$pkg"

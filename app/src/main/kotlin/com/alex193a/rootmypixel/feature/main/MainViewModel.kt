@@ -713,7 +713,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "[*] Root-state restore ${outcome.summary}" +
                         if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
                 )
-                if (!outcome.isComplete) {
+                if (outcome.isComplete) {
+                    // A soft restart reloads the modules, but KernelSU re-reads
+                    // its in-memory allowlist only on a real boot.
+                    mutableState.value = mutableState.value.copy(rebootAfterRestore = true)
+                } else {
                     appendUnrootLog(
                         "[!] Root-state restore incomplete; a soft restart may be " +
                             "needed before modules and grants take effect",
@@ -733,6 +737,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             app.packageManager.getPackageInfo(packageName, 0)
             true
         }.getOrDefault(false)
+
+    /** Reboots so KernelSU re-reads the restored allowlist and module set. */
+    fun rebootAfterRestore() {
+        if (mutableState.value.busy) return
+        viewModelScope.launch(Dispatchers.IO) {
+            if (requestReboot()) {
+                mutableState.value = mutableState.value.copy(rebootAfterRestore = false)
+                appendUnrootLog("[+] Reboot requested to apply the restored root state")
+            } else {
+                appendUnrootLog("[!] Reboot request failed; reboot manually")
+            }
+        }
+    }
+
+    /** Keeps the restored state but suppresses the reboot prompt. */
+    fun dismissRebootPrompt() {
+        mutableState.value = mutableState.value.copy(rebootAfterRestore = false)
+    }
 
     private fun showUnrootWarning(issues: List<UnrootIssue>) {
         val outcome = UnrootCommandOutcome(

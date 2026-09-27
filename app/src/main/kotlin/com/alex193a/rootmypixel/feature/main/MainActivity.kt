@@ -113,6 +113,8 @@ class MainActivity : ComponentActivity() {
                     onCleanup = { installViewModel.cleanupTemporaryFiles() },
                     onCancelUnrootReboot = installViewModel::cancelUnrootReboot,
                     onRebootAnyway = installViewModel::continueUnrootReboot,
+                    onRebootAfterRestore = installViewModel::rebootAfterRestore,
+                    onDismissRebootPrompt = installViewModel::dismissRebootPrompt,
                     onExportLog = { installViewModel.exportLog() },
                 )
             }
@@ -144,6 +146,8 @@ private fun MainScreen(
     onCleanup: () -> Unit,
     onCancelUnrootReboot: () -> Unit,
     onRebootAnyway: () -> Unit,
+    onRebootAfterRestore: () -> Unit,
+    onDismissRebootPrompt: () -> Unit,
     onExportLog: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -195,6 +199,31 @@ private fun MainScreen(
             warning = warning,
             onDismiss = onCancelUnrootReboot,
             onRebootAnyway = onRebootAnyway,
+        )
+    }
+
+    if (state.rebootAfterRestore) {
+        AlertDialog(
+            onDismissRequest = onDismissRebootPrompt,
+            icon = {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            title = { Text(text = stringResource(R.string.reboot_after_restore_title)) },
+            text = { Text(text = stringResource(R.string.reboot_after_restore_message)) },
+            confirmButton = {
+                Button(onClick = onRebootAfterRestore) {
+                    Text(text = stringResource(R.string.reboot_after_restore_confirm))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = onDismissRebootPrompt) {
+                    Text(text = stringResource(R.string.reboot_after_restore_later))
+                }
+            },
         )
     }
 

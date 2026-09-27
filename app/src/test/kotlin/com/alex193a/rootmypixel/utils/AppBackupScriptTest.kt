@@ -70,6 +70,18 @@ class AppBackupScriptTest {
     }
 
     @Test
+    fun `records and reapplies appops and disabled state`() {
+        val text = script()
+
+        assertTrue(text.contains("cmd appops get"))
+        assertTrue(text.contains("cmd appops set"))
+        assertTrue(text.contains("appops.txt"))
+        assertTrue(text.contains("pm list packages -d"))
+        assertTrue(text.contains("disabled=1"))
+        assertTrue(text.contains("pm disable-user"))
+    }
+
+    @Test
     fun `rejects wildcard and relative extra paths`() {
         val text = script()
 

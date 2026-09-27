@@ -9,6 +9,11 @@ data class InstallUiState(
     val canUnrootCurrentSession: Boolean = false,
     /** Non-null while unroot is paused waiting for an explicit reboot decision. */
     val unrootWarning: UnrootWarningUi? = null,
+    /**
+     * True after a root-state restore, which KernelSU only fully applies after
+     * a real reboot (the in-memory allowlist is not re-read on a soft restart).
+     */
+    val rebootAfterRestore: Boolean = false,
     /** False for deterministic/terminal failures such as ROUTE_DISABLED. */
     val retryAllowed: Boolean = true,
 ) {
