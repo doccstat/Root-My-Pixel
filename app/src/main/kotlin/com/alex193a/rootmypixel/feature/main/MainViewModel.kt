@@ -24,6 +24,7 @@ import com.alex193a.rootmypixel.shizuku.ExploitService
 import com.alex193a.rootmypixel.shizuku.IExploitService
 import com.alex193a.rootmypixel.utils.AppBackupRunner
 import com.alex193a.rootmypixel.utils.AppBackupStore
+import com.alex193a.rootmypixel.utils.BundledManager
 import com.alex193a.rootmypixel.utils.KernelSuPresence
 import com.alex193a.rootmypixel.utils.NativeProbe
 import com.alex193a.rootmypixel.utils.RootShell
@@ -78,6 +79,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** True when a KernelSU/Vector root-state archive is on disk. */
     val rootStateArchived: StateFlow<Boolean> = mutableHasRootState.asStateFlow()
 
+    /** The bundled CVE helper, used as the last-resort root channel. */
+    private val rootHelper: File
+        get() = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
 
     private val shizukuPermissionHandler = Handler(Looper.getMainLooper())
     private val shizukuListener = Shizuku.OnBinderReceivedListener {
@@ -144,17 +148,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val kernelSuStatus = NativeProbe.kernelSuStatus()
                 val kernelSuActive = KernelSuPresence.isActive(kernelSuStatus)
-                mutableKernelSuInstalled.value = kernelSuActive ||
-                    app.packageManager.getLaunchIntentForPackage("me.weishu.kernelsu") != null
                 val probe = NativeProbe.run()
                 if (kernelSuActive) {
                     val rootTransport = findAvailableRootTransport()
+                    // Step 9 of the install flow installs the bundled manager.
+                    // Repair the aftermath of a failed step or a manual
+                    // uninstall here, so the loaded driver and the manager that
+                    // talks to it never drift apart. Every refresh retries
+                    // while the manager is missing, which makes re-entering
+                    // this screen the retry affordance.
+                    val managerLog = mutableListOf<String>()
+                    if (rootTransport != null &&
+                        !BundledManager.isBundledVersionInstalled(app)
+                    ) {
+                        BundledManager.installViaRoot(app, rootHelper) { managerLog += it }
+                    }
+                    mutableKernelSuInstalled.value = kernelSuActive ||
+                        app.packageManager.getLaunchIntentForPackage(
+                            BundledManager.PACKAGE,
+                        ) != null
                     mutableState.value = InstallUiState(
                         phase = InstallPhase.Installed,
                         message = app.getString(R.string.status_ksu_active),
                         probeOutput = probe,
                         log = buildString {
                             appendLine(probe)
+                            managerLog.forEach { appendLine(it) }
                             appendLine(
                                 "KernelSU UAPI root-profile grant for this app: " +
                                         kernelSuStatus.appRootGranted,
@@ -175,6 +194,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     return@launch
                 }
+                mutableKernelSuInstalled.value =
+                    app.packageManager.getLaunchIntentForPackage(BundledManager.PACKAGE) != null
                 val deviceInfo = NativeProbe.readDeviceSnapshot()
                 val snapshot = DeviceSnapshot(
                     kernelRelease = deviceInfo.kernelRelease,

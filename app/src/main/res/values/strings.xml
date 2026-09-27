@@ -12,9 +12,7 @@
     <string name="shikuzu_shell_not_active">Shizuku not connected — exploit will fail</string>
     <string name="developed_by">DEVELOPED BY</string>
     <string name="missing_manager_title">KernelSU Manager not installed</string>
-    <string name="missing_manager_description">Installing KernelSU also installs it. You only need this button if the manager was removed while the KernelSU driver stayed loaded.</string>
-    <string name="action_install_bundled_manager">Install bundled KernelSU Manager</string>
-    <string name="install_bundled_manager_failed">Could not open the bundled KernelSU Manager installer</string>
+    <string name="missing_manager_description">It is installed automatically as part of installing KernelSU. This screen retries it whenever the KernelSU driver is loaded.</string>
 
     <!-- Actions -->
     <string name="action_install">Install KernelSU</string>

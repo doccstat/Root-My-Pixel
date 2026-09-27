@@ -605,64 +605,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun installManagerIfNeeded(helper: File) {
-        val installed = installedManagerVersionCode()
-        if (installed == BundledManager.VERSION_CODE) {
-            appendLog("[+] KernelSU Manager $installed already installed")
-            return
-        }
-        appendLog(
-            "[*] Installing bundled KernelSU Manager ${BundledManager.VERSION_CODE} " +
-                "(device has ${installed ?: "none"})...",
-        )
-        val staged = stageBundledManager(helper)
-        if (staged == null) {
-            appendLog("[!] Could not stage the bundled KernelSU Manager")
-            return
-        }
-        var result = RootShell.run("pm install -r $staged", helper = helper)
-        if (!result.isOk &&
-            SIGNATURE_MISMATCH_MARKERS.any { result.output.contains(it, ignoreCase = true) }
-        ) {
-            appendLog("[!] Installed manager has a different signature; replacing it")
-            RootShell.run("pm uninstall ${BundledManager.PACKAGE}", helper = helper)
-            result = RootShell.run("pm install -r $staged", helper = helper)
-        }
-        RootShell.run("rm -f $staged", helper = helper)
-        val now = installedManagerVersionCode()
-        if (result.isOk && now == BundledManager.VERSION_CODE) {
-            appendLog("[+] KernelSU Manager $now installed")
-        } else {
-            appendLog(
-                "[!] KernelSU Manager install failed (${result.code}): " +
-                    result.output.ifBlank { "no output" }.take(300),
-            )
-        }
-    }
-
-    private fun installedManagerVersionCode(): Long? = runCatching {
-        app.packageManager.getPackageInfo(BundledManager.PACKAGE, 0).longVersionCode
-    }.getOrNull()
-
-    private fun stageBundledManager(helper: File): String? {
-        val cached = File(app.cacheDir, "ksu-manager.apk")
-        runCatching {
-            app.assets.open(BundledManager.ASSET_PATH).use { input ->
-                cached.outputStream().use { output -> input.copyTo(output) }
-            }
-        }.getOrElse {
-            appendLog("[!] Bundled manager unpack failed: ${it.message}")
-            return null
-        }
-        val staged = STAGED_MANAGER_PATH
-        val copy = RootShell.run(
-            "cp '${cached.absolutePath}' $staged && chmod 644 $staged && chown root:root $staged",
-            helper = helper,
-        )
-        if (!copy.isOk) {
-            appendLog("[!] Bundled manager staging failed: ${copy.output.take(200)}")
-            return null
-        }
-        return staged
+        BundledManager.installViaRoot(app, helper, ::appendLog)
     }
 
     private fun verifyKernelSuLoaded(
@@ -1371,12 +1314,6 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
         private val LOG_POLL_INTERVAL = 250.milliseconds
-        private const val STAGED_MANAGER_PATH = "/data/local/tmp/ksu-manager.apk"
-        private val SIGNATURE_MISMATCH_MARKERS = listOf(
-            "signatures do not match",
-            "UPDATE_INCOMPATIBLE",
-            "INCONSISTENT_CERTIFICATES",
-        )
         private const val REBOOT_COMMAND =
             "sync; if svc power reboot || reboot; then " +
                     "echo UNROOT_REBOOT_REQUESTED; else echo UNROOT_FAIL:reboot:${'$'}?; fi"
