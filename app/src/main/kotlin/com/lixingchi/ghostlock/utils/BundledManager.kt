@@ -11,13 +11,17 @@ import java.io.File
  * manager (or a download) diverge from the driver it talks to.
  */
 object BundledManager {
-    /** KernelSU's manager package as upstream names it. */
-    const val PACKAGE = "me.weishu.kernelsu"
+    /**
+     * The GhostLock manager package - our KernelSU fork builds the manager
+     * under this name so the driver trusts it (see `kernel/Kbuild` in the fork,
+     * which pins `KSU_MANAGER_PACKAGE` and our signer certificate).
+     */
+    const val PACKAGE = "com.lixingchi.kernelsu"
 
     /** `versionCode` of [ASSET_PATH]; every install is compared against it. */
-    const val VERSION_CODE = 32601L
+    const val VERSION_CODE = 32653L
 
-    const val ASSET_PATH = "manager/KernelSU_v3.3.0_32601-release.apk"
+    const val ASSET_PATH = "manager/GhostLock_08a3b087_32653-release.apk"
 
     /** Where the APK is staged for `pm install` by the root shell. */
     private const val STAGED_PATH = "/data/local/tmp/ksu-manager.apk"

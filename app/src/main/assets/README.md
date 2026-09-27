@@ -27,18 +27,26 @@ at late-load, which is what a profile's `kmi` field supplies. This used to be
 shipped as one file per KMI; those copies were byte-identical, so they were
 merged into this one.
 
-### manager/KernelSU_v3.3.0_32601-release.apk
-The official KernelSU manager for the same release as `ksud/ksud`. The manager
-must match the late-loaded `kernelsu.ko`: the driver is bound to the manager's
-signing certificate, and `ksud` and the manager speak the same versioned UAPI,
-so a separately installed (possibly older or fork) manager can diverge.
+### manager/GhostLock_08a3b087_32653-release.apk
+The GhostLock manager (`com.lixingchi.kernelsu`), built from our KernelSU fork
+(`depot/third-party/github/doccstat/KernelSU`) for the same release as
+`ksud/ksud`. The manager must match the late-loaded `kernelsu.ko`: the driver
+pins the manager's package name *and* its signing certificate, and the manager
+and `ksud` speak the same versioned UAPI, so a separately installed (possibly
+older or fork) manager can diverge.
 
-Pinned to upstream `tiann/KernelSU` v3.3.0 (`KernelSU_v3.3.0_32601-release.apk`,
-sha256 `c197060ecb89702e7d54a4c95e29cf5e8d97369bbbb436979ab7fd6bcde7b077`).
+sha256 `9b53179e06f3d2a9a0a500cd55a597895e43f345b9e83b6067bea982750c89ae`.
 Signer certificate SHA-256 is
-`c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6`, byte-for-byte
-the hash the upstream LKM embeds as `EXPECTED_HASH`, so the driver trusts it
-without runtime registration.
+`ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050` (DER size
+`0x34b`), and the LKM is rebuilt for KMI `android16-6.12` with
+`KSU_MANAGER_PACKAGE=com.lixingchi.kernelsu`, `KSU_EXPECTED_SIZE=0x034b` and
+`KSU_EXPECTED_HASH` set to that same hash - the fork's `kernel/Kbuild` defaults -
+so the driver trusts this manager with no runtime registration.
+
+The manager is built with the GhostLock keystore (kept outside Depot at
+`/home/doccstat/data/local/ksu-manager/`); the LKM and a `ksud` embedding it come
+from the fork's `ghostlock-lkm.yml` GitHub workflow. Drop the built `ksud` into
+`ksud/ksud`.
 
 Bump `ksud/ksud` and this APK together; `InstallViewModel` installs/repairs the
 manager from this asset after the LKM is loaded.

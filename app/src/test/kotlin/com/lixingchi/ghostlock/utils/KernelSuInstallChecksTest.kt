@@ -40,10 +40,10 @@ class KernelSuInstallChecksTest {
     @Test
     fun `trusted KernelSU manager signature is parsed from ksud output`() {
         val signature = KernelSuInstallChecks.parseManagerSignature(
-            "size: 0x33b, hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6",
+            "size: 0x34b, hash: ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050",
         )
 
-        assertEquals(0x33b, signature?.size)
+        assertEquals(0x34b, signature?.size)
         assertTrue(signature != null && KernelSuInstallChecks.isTrustedManagerSignature(signature))
     }
 
