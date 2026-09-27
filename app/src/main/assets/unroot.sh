@@ -1,12 +1,14 @@
 #!/system/bin/sh
 # Unroot and restore stock state for Root-My-Pixel.
 # Structured UNROOT_* markers are consumed by the Android UI.
-
-LOG_FILE="/data/local/tmp/unr00t.log"
-echo "=== Unroot started at $(date) ===" > "$LOG_FILE" 2>/dev/null || true
+#
+# Deliberately writes no log file of its own: /data/local/tmp is world-shared
+# and a root-owned file there is a trace that then has to be swept again. The
+# app captures this script's stdout and persists it to its own private
+# storage (files/unroot.log), which survives the reboot and needs no cleanup.
 
 log() {
-    echo "[$(date +%T)] $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "[$(date +%T)] $*"
+    echo "[$(date +%T)] $*"
 }
 
 exec_root() {
@@ -68,6 +70,31 @@ cleanup_step cve-root rm -f /data/local/tmp/cve-2026-43499-root
 cleanup_step ksud rm -f /data/local/tmp/ksud-pixel
 cleanup_step exploit-logs rm -f /data/local/tmp/exploit.log /data/local/tmp/su_daemon.log
 
+# The app's private tree keeps a copy of the payloads, the staged scripts and
+# the install log. None of it is inside /data/adb, so the sweep above misses
+# it; remove it here while keeping files/backups and the plan files, which are
+# the restore source. An unlinked script that is already running still works.
+cleanup_step app-payloads rm -rf /data/data/com.lixingchi.ghostlock/files/payloads
+cleanup_step app-scripts rm -rf /data/data/com.lixingchi.ghostlock/files/scripts
+cleanup_step app-log rm -f /data/data/com.lixingchi.ghostlock/files/exploit.log
+cleanup_step tmp-logs rm -f /data/local/tmp/unr00t.log /data/local/tmp/rt.log*
+
+# A staged virtual-A/B update is applied by the reboot itself: update_engine's
+# CleanupPreviousUpdateAction calls snapshot->InitiateMerge() and the device
+# boots the new build even though nothing was ever "installed". Cancel the state
+# first, and let a failure block the reboot rather than risk applying it.
+ota_staged=0
+[ -n "$(ls -A /data/ota_package 2>/dev/null)" ] && ota_staged=1
+[ -n "$(ls -A /metadata/ota/snapshots 2>/dev/null)" ] && ota_staged=1
+echo "UNROOT_OTA_STAGED:$ota_staged"
+
+cleanup_step ota-stop-engine /system/bin/sh -c '\''stop update_engine'\''
+cleanup_step ota-payload /system/bin/sh -c '\''rm -rf /data/ota_package/*'\''
+cleanup_step ota-prefs /system/bin/sh -c '\''rm -rf /data/misc/update_engine/prefs/* /data/misc/update_engine/tmp/*'\''
+cleanup_step ota-metadata /system/bin/sh -c '\''rm -rf /metadata/ota/*'\''
+cleanup_step ota-sync /system/bin/sh -c '\''sync'\''
+cleanup_step ota-start-engine /system/bin/sh -c '\''start update_engine'\''
+
 if [ "$failed" -ne 0 ]; then
     echo "UNROOT_CLEANUP_PARTIAL"
     exit 0
@@ -81,6 +108,16 @@ if [ "$failed" -ne 0 ]; then
     echo "UNROOT_CLEANUP_PARTIAL"
     exit 0
 fi
+
+# The KernelSU manager is itself a root app, and the clean state must not keep
+# one installed. Phase 1 reinstalls the bundled, version-matched copy on the
+# next root, so removing it here loses nothing. Best-effort per package: an
+# absent or foreign manager must not block the reboot.
+for manager in me.weishu.kernelsu com.resukisu.resukisu com.sukisu.ultra; do
+    if pm uninstall --user 0 "$manager" >/dev/null 2>&1; then
+        echo "UNROOT_MANAGER_REMOVED:$manager"
+    fi
+done
 
 sync
 echo "UNROOT_CLEANUP_OK"

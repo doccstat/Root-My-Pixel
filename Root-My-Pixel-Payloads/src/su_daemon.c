@@ -477,7 +477,7 @@ static int run_s25u_late_load(struct su_request *request, int conn) {
     }
     if (loader == 0) {
       execl(LOGCAT_PATH, "logcat", "late-load", "--kmi", "android15-6.6",
-            "--package-name", "com.resukisu.resukisu", (char *)NULL);
+            "--package-name", "me.weishu.kernelsu", (char *)NULL);
       dprintf(STDERR_FILENO, "late-load: exec: %s\n", strerror(errno));
       _exit(12);
     }
