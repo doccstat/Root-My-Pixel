@@ -19,6 +19,7 @@ class NetfixScriptTest {
         "allow domain node node recvfrom",
         "allow unlabeled node node sendto",
         "allow unlabeled node node recvfrom",
+        "allow domain unlabeled peer recv",
     )
 
     private fun script(): String {
@@ -33,7 +34,8 @@ class NetfixScriptTest {
 
     @Test
     fun `patches every broken selinux class`() {
-        // The LKM desynchronises SECMARK for three classes (packet, netif, node).
+        // The LKM desynchronises SECMARK for four classes (packet, netif, node,
+        // peer).
         // A partial set still breaks DNS or aborts netd, so guard the full list.
         val text = script()
         for (rule in expectedRules) {

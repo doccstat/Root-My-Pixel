@@ -46,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
             val archivedPackages by installViewModel.archivedPackages.collectAsStateWithLifecycle()
             val extraPaths by installViewModel.extraPaths.collectAsStateWithLifecycle()
             val rootStateArchived by installViewModel.rootStateArchived.collectAsStateWithLifecycle()
+            val restoreOnRoot by installViewModel.restoreOnRoot.collectAsStateWithLifecycle()
 
             RootMyPixelTheme {
                 MainScreen(
@@ -102,11 +104,12 @@ class MainActivity : ComponentActivity() {
                     extraCount = extraPaths.size,
                     archivedCount = archivedPackages.size,
                     hasRootState = rootStateArchived,
+                    restoreOnRoot = restoreOnRoot,
                     onRefresh = { installViewModel.refresh() },
                     onChooseApps = {
                         startActivity(Intent(this, AppPickerActivity::class.java))
                     },
-                    onRestoreApps = { installViewModel.restoreBackedUpApps() },
+                    onRestoreOnRootChange = installViewModel::setRestoreOnRoot,
                     onInstall = { installViewModel.install() },
                     onUnroot = { installViewModel.unrootAndReboot() },
                     onCleanup = { installViewModel.cleanupTemporaryFiles() },
@@ -137,9 +140,10 @@ private fun MainScreen(
     extraCount: Int,
     archivedCount: Int,
     hasRootState: Boolean,
+    restoreOnRoot: Boolean,
     onRefresh: () -> Unit,
     onChooseApps: () -> Unit,
-    onRestoreApps: () -> Unit,
+    onRestoreOnRootChange: (Boolean) -> Unit,
     onInstall: () -> Unit,
     onUnroot: () -> Unit,
     onCleanup: () -> Unit,
@@ -342,6 +346,34 @@ private fun MainScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // Restore is part of the install flow, not an action: this decides
+            // whether that flow applies the archive or starts fresh.
+            if (archivedCount > 0 || extraCount > 0 || hasRootState) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.restore_on_root_title),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.restore_on_root_subtitle),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = restoreOnRoot,
+                        onCheckedChange = onRestoreOnRootChange,
+                        enabled = !state.busy,
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Action button: Unroot & Reboot when installed, Install when ready
             if (state.phase == InstallPhase.Installed) {
                 Button(
@@ -393,29 +425,6 @@ private fun MainScreen(
                 Icon(Icons.Rounded.Shield, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = stringResource(R.string.action_choose_apps, backupCount, extraCount))
-            }
-
-            if (archivedCount > 0 || extraCount > 0 || hasRootState) {
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onRestoreApps,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = !state.busy && state.phase == InstallPhase.Installed,
-                ) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = stringResource(R.string.action_restore_apps, archivedCount))
-                }
-                if (state.phase != InstallPhase.Installed) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.restore_requires_root),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

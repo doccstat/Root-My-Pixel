@@ -16,6 +16,10 @@ object AppBackupStore {
     private const val PLAN_FILE = "selected_apps.json"
     private const val EXTRA_PATHS_FILE = "extra_paths.json"
     private const val BACKUP_DIR = "backups"
+    private const val PENDING_FILE = "restore_pending"
+    private const val RESTORE_DONE = "0"
+    private const val PREFS = "rmp_backup_prefs"
+    private const val KEY_RESTORE_ON_ROOT = "restore_on_root"
 
     fun planFile(context: Context): File = File(context.filesDir, PLAN_FILE)
 
@@ -98,5 +102,44 @@ object AppBackupStore {
         return runCatching {
             root.walkTopDown().filter(File::isFile).sumOf(File::length)
         }.getOrDefault(0L)
+    }
+
+    /**
+     * Whether the install flow should restore the backup once root is up.
+     * Off means "start fresh": the archive stays on disk but is not applied.
+     */
+    fun restoreOnRoot(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_RESTORE_ON_ROOT, true)
+
+    fun setRestoreOnRoot(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_RESTORE_ON_ROOT, enabled)
+            .apply()
+    }
+
+    /**
+     * True while a backup has been taken but not yet applied. The marker is
+     * only cleared by a completed restore, so a restore that is skipped
+     * (toggle off) or fails is still offered on the next root window.
+     *
+     * A missing marker means an install from before this flag existed: treat
+     * an archive on disk as pending so the first run still restores it.
+     */
+    fun isRestorePending(context: Context): Boolean {
+        val marker = File(context.filesDir, PENDING_FILE)
+        if (marker.isFile) {
+            return marker.readText().trim() != RESTORE_DONE
+        }
+        return hasRootStateBackup(context) || archivedPackages(context).isNotEmpty()
+    }
+
+    fun markRestorePending(context: Context) {
+        runCatching { File(context.filesDir, PENDING_FILE).writeText("1") }
+    }
+
+    fun clearRestorePending(context: Context) {
+        runCatching { File(context.filesDir, PENDING_FILE).writeText(RESTORE_DONE) }
     }
 }

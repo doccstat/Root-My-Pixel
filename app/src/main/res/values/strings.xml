@@ -123,8 +123,8 @@
     <string name="app_picker_extra_dirs">Extra directories</string>
     <string name="app_picker_extra_dirs_hint">One absolute path per line, e.g. /data/local/tmp/nettest.sh. Paths with spaces are not supported.</string>
     <string name="action_choose_apps">Back up &amp; remove: %1$d apps · %2$d dirs</string>
-    <string name="action_restore_apps">Restore selected apps (%1$d)</string>
-    <string name="restore_requires_root">Re-root first: restoring apps and the KernelSU/Vector state needs root access.</string>
+    <string name="restore_on_root_title">Restore backup after root</string>
+    <string name="restore_on_root_subtitle">Install the backed-up apps, their data and the KernelSU/Vector state when root comes up. Turn off to start fresh.</string>
     <string name="reboot_after_restore_title">Reboot to apply the restored root state</string>
     <string name="reboot_after_restore_message">Apps, directories and the KernelSU/Vector state are back. Modules load on a soft restart, but KernelSU only re-reads its superuser allowlist and app profiles on a real reboot.</string>
     <string name="reboot_after_restore_confirm">Reboot now</string>

@@ -60,7 +60,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val mutableArchivedPackages = MutableStateFlow<Set<String>>(emptySet())
     private val mutableExtraPaths = MutableStateFlow<List<String>>(emptyList())
     private val mutableHasRootState = MutableStateFlow(false)
+    private val mutableRestoreOnRoot = MutableStateFlow(true)
     private var refreshJob: Job? = null
+    private var autoRestoreJob: Job? = null
 
     val state: StateFlow<InstallUiState> = mutableState.asStateFlow()
     val shizukuAvailable: StateFlow<Boolean> = mutableShizukuAvailable.asStateFlow()
@@ -78,6 +80,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** True when a KernelSU/Vector root-state archive is on disk. */
     val rootStateArchived: StateFlow<Boolean> = mutableHasRootState.asStateFlow()
+
+    /** Whether the install flow restores the archive once root is up. */
+    val restoreOnRoot: StateFlow<Boolean> = mutableRestoreOnRoot.asStateFlow()
 
     /** The bundled CVE helper, used as the last-resort root channel. */
     private val rootHelper: File
@@ -192,6 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         },
                         canUnrootCurrentSession = rootTransport != null,
                     )
+                    autoRestoreAfterRoot()
                     return@launch
                 }
                 mutableKernelSuInstalled.value =
@@ -609,6 +615,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         mutableArchivedPackages.value = AppBackupStore.archivedPackages(app)
         mutableExtraPaths.value = AppBackupStore.loadExtraPaths(app)
         mutableHasRootState.value = AppBackupStore.hasRootStateBackup(app)
+        mutableRestoreOnRoot.value = AppBackupStore.restoreOnRoot(app)
+    }
+
+    /** "Start fresh" versus "restore the backup" for the next root window. */
+    fun setRestoreOnRoot(enabled: Boolean) {
+        AppBackupStore.setRestoreOnRoot(app, enabled)
+        mutableRestoreOnRoot.value = enabled
     }
 
     /** Persists the picker selection. */
@@ -684,6 +697,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendUnrootLog("[!] Aborting unroot: root-state backup incomplete")
             return false
         }
+        // From here on an archive exists that the next root window can apply.
+        AppBackupStore.markRestorePending(app)
 
         var removedAll = true
         for (pkg in installed) {
@@ -702,10 +717,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return removedAll
     }
 
-    /** Reinstalls archived apps that are missing and restores their data. */
-    fun restoreBackedUpApps() {
+    /**
+     * Applies every archive: the missing selected apps and their data, the
+     * named extra directories and the KernelSU/Vector root state. Runs
+     * automatically once root is up when the restore toggle is on, so there is
+     * no separate restore action.
+     */
+    private fun restorePlan() {
+        if (autoRestoreJob?.isActive == true) return
         if (mutableState.value.busy) return
-        viewModelScope.launch(Dispatchers.IO) {
+        autoRestoreJob = viewModelScope.launch(Dispatchers.IO) {
             reloadBackupState()
             val helper = File(app.applicationInfo.nativeLibraryDir, "libcve43499root.so")
             val targets = AppBackupStore.restorable(app).filterNot(::isPackageInstalled)
@@ -713,11 +734,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 .takeIf { AppBackupStore.hasExtraBackup(app) }
                 .orEmpty()
             val rootState = AppBackupStore.hasRootStateBackup(app)
+            var complete = true
             if (targets.isEmpty() && extras.isEmpty() && !rootState) {
                 appendUnrootLog(
                     "[i] Nothing to restore: archived apps are installed, no extra " +
                         "directory has an archive and there is no root-state archive",
                 )
+                AppBackupStore.clearRestorePending(app)
                 return@launch
             }
             mutableState.value = mutableState.value.copy(
@@ -733,6 +756,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 outcome.failed.forEach { (pkg, reason) ->
                     appendUnrootLog("[!] Restore failed: $pkg ($reason)")
                 }
+                if (!outcome.isComplete) complete = false
             }
             if (extras.isNotEmpty()) {
                 appendUnrootLog("[*] Restoring ${extras.size} extra director(ies) from backup...")
@@ -741,6 +765,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "[*] Extra-path restore ${outcome.summary}" +
                         if (outcome.raw.isBlank()) "" else "\n${outcome.raw.trim()}",
                 )
+                if (!outcome.isComplete) complete = false
             }
             if (rootState) {
                 appendUnrootLog("[*] Restoring KernelSU/Vector root state...")
@@ -754,18 +779,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     // its in-memory allowlist only on a real boot.
                     mutableState.value = mutableState.value.copy(rebootAfterRestore = true)
                 } else {
+                    complete = false
                     appendUnrootLog(
                         "[!] Root-state restore incomplete; a soft restart may be " +
                             "needed before modules and grants take effect",
                     )
                 }
             }
+            if (complete) AppBackupStore.clearRestorePending(app)
             mutableState.value = mutableState.value.copy(
                 phase = InstallPhase.Installed,
                 message = app.getString(R.string.status_ksu_active),
             )
             reloadBackupState()
         }
+    }
+
+    /**
+     * Applies the archive right after a root window whenever the user left the
+     * "restore after root" toggle on. The pending marker is only cleared by a
+     * completed restore, so a skipped or failed one is retried later.
+     */
+    private fun autoRestoreAfterRoot() {
+        if (!AppBackupStore.isRestorePending(app)) return
+        if (!AppBackupStore.restoreOnRoot(app)) return
+        appendUnrootLog("[*] Restore-after-root is on; applying the backup...")
+        restorePlan()
     }
 
     private fun isPackageInstalled(packageName: String): Boolean =
