@@ -8,30 +8,28 @@ import java.io.File
  * late-loaded root: module changes, Zygisk injection and Xposed hooks all take
  * effect, and the display comes back lit.
  *
- * Two steps, in this order.
+ * The restart is deliberately narrow. `ksud soft-reboot` (and the KernelSU
+ * manager's button) runs init's blanket `stop`/`start`, which tears the whole
+ * display stack down and leaves the cover panel of this foldable in a stale
+ * DPMS/PSR state - the three-dot cover artifact. Clearing that afterwards is
+ * not an option: a composer HAL restart escalates to a RescueParty/recovery
+ * boot, and unbinding the panel driver panics the kernel. So the panel is never
+ * staled in the first place.
  *
- * 1. `ksud soft-reboot`. Its emulation runs `stop`/`start` and the
- *    post-fs-data and service stages itself, which restarts `zygote64` and
- *    `system_server` (so a Zygisk/Xposed module installed after the LKM load
- *    is re-injected) and is the only window where a module's `service.sh`
- *    starts while `system_server` is down - required for Vector's `vectord` to
- *    claim the `serial` service.
+ * 1. `setprop sys.boot_completed 0`, then `killall -9 system_server`. The
+ *    runtime restart re-forks `system_server` and restarts `zygote64` (so a
+ *    Zygisk/Xposed module installed after the LKM load is re-injected) while
+ *    SurfaceFlinger and the composer HAL keep running.
  *
- * 2. Re-initialise the panel, then a sleep/wake cycle. The userspace restart
- *    does not reset the DSI/DPU pipeline, so the cover panel keeps whatever
- *    DPMS/PSR state it had while the display stack was torn down. That is the
- *    three-dot cover-panel artifact and the black screen: the framework comes
- *    back but the panel is never re-driven. `cmd display power-reset <id>`
- *    asks the display stack to drive each connected panel back to the power
- *    state it should have; the `KEYCODE_SLEEP`/`KEYCODE_WAKEUP` pair afterwards
- *    is a belt-and-braces DPMS toggle for builds without `cmd display`.
+ * 2. The KernelSU module stages then run explicitly, in boot order:
+ *    `ksud post-fs-data` while the framework is still down, then
+ *    `ksud services` and `ksud boot-completed` once it is back. That is the
+ *    part a bare `system_server` restart misses, and why KernelSU ships its own
+ *    `soft-reboot`.
  *
- * Deliberately **not** here: restarting the composer HAL. It was the only
- * step that ever cleared the cover artifact, but a composer restart issued
- * while the framework is still settling (for example a second soft reboot
- * shortly after the first) crash-loops `system_server` and takes the whole
- * device down through RescueParty/recovery. The panel is re-driven through
- * `cmd display` instead, which never touches the framework.
+ * Deliberately **not** here: init `stop`/`start` (stales the panel), a composer
+ * restart (recovery boot), a panel-driver unbind (kernel panic) and
+ * `cmd display power-reset` (a no-op on the folded cover panel).
  *
  * Every step kills the framework (and therefore this app), so the work runs in
  * a detached `setsid` shell rather than in the app process.
@@ -63,8 +61,6 @@ object SoftReboot {
         "echo \"[*] before: boot_completed=\$(getprop sys.boot_completed) reason=\$(getprop sys.boot.reason)\"",
         "echo \"[*] boot history:\"",
         "getprop persist.sys.boot.reason.history",
-        "echo \"[*] displays:\"",
-        "cmd display get-displays --ids-only 2>/dev/null",
         "if [ \"\$(getprop sys.boot_completed)\" != \"1\" ]; then",
         "  echo \"[-] soft reboot: framework is not up, aborting\"",
         "  exit 1",
@@ -81,12 +77,22 @@ object SoftReboot {
         "  exit 1",
         "fi",
         "echo \"\$now\" > $LOCK_PATH 2>/dev/null || true",
-        "echo \"[*] step 1: ksud soft-reboot\"",
+        "echo \"[*] step 1: restarting the framework only (zygote + system_server)\"",
+        "setprop sys.boot_completed 0",
+        "killall -9 system_server",
+        "i=0",
+        "while [ \$i -lt 30 ]; do",
+        "  if [ -z \"\$(pidof system_server)\" ]; then break; fi",
+        "  i=\$((i+1))",
+        "  sleep 1",
+        "done",
+        "echo \"[*] system_server down after \${i} ticks\"",
+        "echo \"[*] step 2: KernelSU post-fs-data stage\"",
         "if [ -x \"$ksudPath\" ]; then",
-        "  \"$ksudPath\" soft-reboot",
-        "  echo \"[*] ksud soft-reboot returned \$?\"",
+        "  \"$ksudPath\" post-fs-data",
+        "  echo \"[*] post-fs-data returned \$?\"",
         "else",
-        "  echo \"[-] soft reboot: $ksudPath not found, panel re-init only\"",
+        "  echo \"[-] soft reboot: $ksudPath not found, framework restart only\"",
         "fi",
         "i=0",
         "while [ \$i -lt 180 ]; do",
@@ -95,17 +101,13 @@ object SoftReboot {
         "  sleep 1",
         "done",
         "echo \"[*] framework back after \${i}s (reason=\$(getprop sys.boot.reason))\"",
-        "sleep 10",
-        "echo \"[*] step 2: re-initialising panel power\"",
-        "for id in \$(cmd display get-displays --ids-only 2>/dev/null); do",
-        "  echo \"[*] power-reset display \$id\"",
-        "  cmd display power-reset \"\$id\" >/dev/null 2>&1",
-        "  echo \"[*] power-reset display \$id returned \$?\"",
-        "done",
-        "echo \"[*] step 3: DPMS toggle\"",
-        "input keyevent KEYCODE_SLEEP",
-        "sleep 2",
-        "input keyevent KEYCODE_WAKEUP",
+        "if [ -x \"$ksudPath\" ]; then",
+        "  echo \"[*] step 3: KernelSU services + boot-completed stages\"",
+        "  \"$ksudPath\" services",
+        "  echo \"[*] services returned \$?\"",
+        "  \"$ksudPath\" boot-completed",
+        "  echo \"[*] boot-completed returned \$?\"",
+        "fi",
         "echo \"===== soft reboot done \$(date +%s) reason=\$(getprop sys.boot.reason) =====\"",
     ).joinToString("\n")
 }

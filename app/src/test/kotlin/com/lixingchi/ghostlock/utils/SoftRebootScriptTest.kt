@@ -5,16 +5,29 @@ import org.junit.Test
 
 class SoftRebootScriptTest {
     private val script = SoftReboot.buildScript()
+    private val ksud = SoftReboot.DEFAULT_KSUD_PATH
 
     @Test
     fun neverRestartsTheComposer() {
-        // A composer restart while the framework is settling is what escalated
-        // to a RescueParty/recovery boot, and the panel is now re-driven with
-        // `cmd display power-reset` instead.
         assertTrue(
-            "the soft reboot must not restart the composer HAL",
+            "a composer restart escalates to a RescueParty/recovery boot",
             script.indexOf("setprop ctl.restart") == -1,
         )
+    }
+
+    @Test
+    fun neverTearsDownTheDisplayStack() {
+        // init `stop`/`start` is what stales the cover panel; the panel-driver
+        // unbind panics the kernel; `cmd display power-reset` is a no-op on the
+        // folded cover panel.
+        assertTrue(
+            "must not stop the display stack",
+            !script.contains("surfaceflinger", ignoreCase = true),
+        )
+        assertTrue("must not unbind the panel driver", script.indexOf("/unbind") == -1)
+        assertTrue("must not use the blanket init stop", script.indexOf("\nstop\n") == -1)
+        assertTrue("must not use the blanket init start", script.indexOf("\nstart\n") == -1)
+        assertTrue("must not use cmd display", script.indexOf("cmd display") == -1)
     }
 
     @Test
@@ -29,16 +42,41 @@ class SoftRebootScriptTest {
     }
 
     @Test
-    fun softRebootsThroughKsud() {
-        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
-        assertTrue("expected a ksud soft-reboot in the script", ksud >= 0)
+    fun restartsOnlyTheFramework() {
+        assertTrue(script.contains("setprop sys.boot_completed 0"))
+        assertTrue(
+            "must restart the runtime instead of the whole device",
+            script.contains("killall -9 system_server"),
+        )
     }
 
     @Test
-    fun waitsForTheFrameworkAfterKsud() {
+    fun runsTheKsudModuleStagesInBootOrder() {
+        val post = script.indexOf("$ksud\" post-fs-data")
+        val services = script.indexOf("$ksud\" services")
+        val completed = script.indexOf("$ksud\" boot-completed")
+        assertTrue("expected a post-fs-data stage", post >= 0)
+        assertTrue("post-fs-data must precede services", services > post)
+        assertTrue("services must precede boot-completed", completed > services)
+    }
+
+    @Test
+    fun postFsDataRunsWhileTheFrameworkIsDown() {
+        val kill = script.indexOf("killall -9 system_server")
+        val post = script.indexOf("$ksud\" post-fs-data")
+        val wait = script.indexOf("while [ \$i -lt 180 ]")
+        assertTrue("post-fs-data must follow the framework restart", post > kill)
+        assertTrue("post-fs-data must run before waiting for boot_completed", post < wait)
+    }
+
+    @Test
+    fun waitsForTheFrameworkAfterTheRestart() {
         val waits = script.split("sys.boot_completed").size - 1
         assertTrue("expected a boot_completed guard and wait", waits >= 2)
-        assertTrue(script.indexOf("sys.boot_completed") < script.indexOf("soft-reboot"))
+        assertTrue(
+            "the wait must follow the framework restart",
+            script.indexOf("killall -9 system_server") < script.indexOf("while [ \$i -lt 180 ]"),
+        )
     }
 
     @Test
@@ -53,34 +91,6 @@ class SoftRebootScriptTest {
         // while the framework was still settling from the first.
         assertTrue(script.contains(SoftReboot.LOCK_PATH))
         assertTrue(script.contains(SoftReboot.MIN_INTERVAL_SECONDS.toString()))
-    }
-
-    @Test
-    fun reLightsTheDisplayAfterKsudWithADpmsToggle() {
-        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
-        val sleep = script.indexOf("KEYCODE_SLEEP")
-        val wake = script.indexOf("KEYCODE_WAKEUP")
-        assertTrue("expected a DPMS off", sleep > ksud)
-        assertTrue("expected a DPMS on after it", wake > sleep)
-        // Must not start a second composer restart after ksud.
-        assertTrue(
-            "no composer restart may follow ksud",
-            script.indexOf("setprop ctl.restart", ksud) == -1,
-        )
-    }
-
-    @Test
-    fun reInitialisesPanelPowerAfterKsud() {
-        val ksud = script.indexOf("/data/adb/ksud\" soft-reboot")
-        val reset = script.indexOf("cmd display power-reset")
-        assertTrue("expected a panel power reset", reset >= 0)
-        // `ksud soft-reboot` stales the panel, so the reset has to run after it
-        // (and it must be a power-reset, not another composer restart).
-        assertTrue("panel power reset must follow ksud", reset > ksud)
-        assertTrue(
-            "power reset must enumerate the connected displays",
-            script.contains("get-displays --ids-only"),
-        )
     }
 
     @Test
