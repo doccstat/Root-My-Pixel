@@ -869,7 +869,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      *    scripts in each stage, so the SECMARK rules are back before another
      *    module `service.sh` can restart system_server and redo the netd
      *    handshake.
-     *  - `module_compat.sh` is copied to both `.d` directories as well. It makes
+     *  - `module_compat.sh` is copied to both `.d` directories as `99-*`, after
+     *    the `00-rmp-netfix.sh` rule patch: the netfix is on the system_server
+     *    bring-up path and takes ~1.4 s, so nothing may run ahead of it. It makes
      *    NeoZygisk's post-fs-data idempotent (its unconditional wipe unlinked a
      *    live daemon's socket, after which no Zygisk module ever loaded), gives
      *    Vector's `service.sh` an `unshare` that understands `--propagation`,
@@ -1323,7 +1325,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
         /** Common stage script that re-applies the SELinux SECMARK repair. */
         private const val NETFIX_STAGE_NAME = "00-rmp-netfix.sh"
-        private const val COMPAT_STAGE_NAME = "00-rmp-module-compat.sh"
+        private const val COMPAT_STAGE_NAME = "99-rmp-module-compat.sh"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
