@@ -27,7 +27,6 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
-import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -71,7 +70,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex193a.rootmypixel.R
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
-import com.alex193a.rootmypixel.utils.BundledManager
 import com.alex193a.rootmypixel.feature.apps.AppPickerActivity
 import com.alex193a.rootmypixel.ui.components.UnrootIncompleteSheet
 import com.alex193a.rootmypixel.ui.theme.RootMyPixelTheme
@@ -301,7 +299,6 @@ private fun MainScreen(
             // KernelSU Manager status
             KernelSuManagerCard(
                 installed = kernelSuInstalled,
-                context = LocalContext.current,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -559,7 +556,7 @@ private fun ShizukuStatusCard(available: Boolean) {
 }
 
 @Composable
-private fun KernelSuManagerCard(installed: Boolean, context: android.content.Context) {
+private fun KernelSuManagerCard(installed: Boolean) {
     if (installed) return
 
     Card(
@@ -592,41 +589,6 @@ private fun KernelSuManagerCard(installed: Boolean, context: android.content.Con
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    val uri = BundledManager.installerUri(context)
-                    if (uri == null) {
-                        Toast.makeText(
-                            context,
-                            R.string.install_bundled_manager_failed,
-                            Toast.LENGTH_LONG,
-                        ).show()
-                        return@OutlinedButton
-                    }
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    runCatching { context.startActivity(intent) }.onFailure {
-                        Toast.makeText(
-                            context,
-                            R.string.install_bundled_manager_failed,
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    Icons.Rounded.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(stringResource(R.string.action_install_bundled_manager))
-            }
         }
     }
 }
