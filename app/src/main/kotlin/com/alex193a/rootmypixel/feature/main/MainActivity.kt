@@ -27,7 +27,7 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
-import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -71,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex193a.rootmypixel.R
 import com.alex193a.rootmypixel.domain.model.InstallPhase
 import com.alex193a.rootmypixel.domain.model.InstallUiState
+import com.alex193a.rootmypixel.utils.BundledManager
 import com.alex193a.rootmypixel.feature.apps.AppPickerActivity
 import com.alex193a.rootmypixel.ui.components.UnrootIncompleteSheet
 import com.alex193a.rootmypixel.ui.theme.RootMyPixelTheme
@@ -594,21 +595,37 @@ private fun KernelSuManagerCard(installed: Boolean, context: android.content.Con
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        data = "https://github.com/tiann/KernelSU/releases".toUri()
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    val uri = BundledManager.installerUri(context)
+                    if (uri == null) {
+                        Toast.makeText(
+                            context,
+                            R.string.install_bundled_manager_failed,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        return@OutlinedButton
                     }
-                    context.startActivity(intent)
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    runCatching { context.startActivity(intent) }.onFailure {
+                        Toast.makeText(
+                            context,
+                            R.string.install_bundled_manager_failed,
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(
-                    Icons.Rounded.OpenInBrowser,
+                    Icons.Rounded.Download,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Install KernelSU Manager")
+                Text(stringResource(R.string.action_install_bundled_manager))
             }
         }
     }

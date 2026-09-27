@@ -444,7 +444,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         fun parseAttempt(transport: String, output: String): UnrootCommandOutcome? {
             val outcome = UnrootCommandOutcome.parse(output)
             appendUnrootLog("[*] $transport output:\n${output.ifBlank { "no output" }}")
-            persistUnrootOutput(transport, output)
             return if (outcome.cleanupComplete ||
                 (outcome.hasStructuredOutput && !outcome.transportUnavailable)
             ) outcome else null
@@ -485,20 +484,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             issues = UnrootIssue.affectedByMissingTransport,
             hasStructuredOutput = true,
         )
-    }
-
-    /**
-     * Keeps the raw unroot output on disk so a failed or truncated cleanup can
-     * still be diagnosed after the reboot wipes the in-memory log.
-     */
-    private fun persistUnrootOutput(transport: String, output: String) {
-        runCatching {
-            val log = File(app.filesDir, UNROOT_LOG_FILE)
-            log.appendText(
-                "\n===== $transport @ ${System.currentTimeMillis()} =====\n" +
-                    output.ifBlank { "no output" } + "\n",
-            )
-        }
     }
 
     private fun requestReboot(): Boolean {
@@ -818,7 +803,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
         private const val ROOT_ID_COMMAND = "id -u"
         private const val KERNEL_SU_PATH = "/system/bin/su"
-        private const val UNROOT_LOG_FILE = "unroot.log"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
