@@ -50,6 +50,16 @@ class ModuleCompatScriptTest {
     }
 
     @Test
+    fun `relabels the vector module tree for the parasitic manager`() {
+        val text = script()
+        // shell cannot read adb_data_file, so the manager APK transfer is
+        // denied, the host parses a null PackageInfo and the manager NPEs.
+        assertTrue(text.contains("relabel_vector"))
+        assertTrue(text.contains("chcon -R u:object_r:system_file:s0"))
+        assertTrue(text.contains("u:object_r:xposed_file:s0"))
+    }
+
+    @Test
     fun `is idempotent and reversible`() {
         val text = script()
         assertTrue(text.contains(".rmp-orig"))

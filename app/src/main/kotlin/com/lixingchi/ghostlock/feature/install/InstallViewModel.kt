@@ -869,38 +869,51 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      *    scripts in each stage, so the SECMARK rules are back before another
      *    module `service.sh` can restart system_server and redo the netd
      *    handshake.
-     *  - `module_compat.sh` makes NeoZygisk's post-fs-data idempotent (its
-     *    unconditional wipe unlinked a live daemon's socket, after which no
-     *    Zygisk module ever loaded) and gives Vector's `service.sh` an
-     *    `unshare` that understands `--propagation`.
+     *  - `module_compat.sh` is copied to both `.d` directories as well. It makes
+     *    NeoZygisk's post-fs-data idempotent (its unconditional wipe unlinked a
+     *    live daemon's socket, after which no Zygisk module ever loaded), gives
+     *    Vector's `service.sh` an `unshare` that understands `--propagation`,
+     *    and re-asserts the `system_file` label on the Vector module tree so
+     *    the parasitic manager can be transferred into the shell host. The last
+     *    one has to run on every start because a module reinstall or a
+     *    `/data/adb` restore (both fresh inodes) resets the label to the
+     *    platform default, `adb_data_file`.
      *
      * Everything under `/data/adb` is removed by the Unroot path.
      */
     private fun installDurableStageFixes(helper: File) {
         val netfix = AssetScriptRunner.stage(app, "netfix.sh").absolutePath
+        val compat = AssetScriptRunner.stage(app, "module_compat.sh").absolutePath
         val installCommand = buildString {
             append("mkdir -p /data/adb/post-fs-data.d /data/adb/service.d && ")
             append("cp -f '$netfix' /data/adb/post-fs-data.d/$NETFIX_STAGE_NAME && ")
             append("cp -f '$netfix' /data/adb/service.d/$NETFIX_STAGE_NAME && ")
             append("chmod 755 /data/adb/post-fs-data.d/$NETFIX_STAGE_NAME ")
-            append("/data/adb/service.d/$NETFIX_STAGE_NAME && echo RMP_STAGE_FIX_OK")
+            append("/data/adb/service.d/$NETFIX_STAGE_NAME && ")
+            append("cp -f '$compat' /data/adb/post-fs-data.d/$COMPAT_STAGE_NAME && ")
+            append("cp -f '$compat' /data/adb/service.d/$COMPAT_STAGE_NAME && ")
+            append(
+                "chmod 755 /data/adb/post-fs-data.d/$COMPAT_STAGE_NAME " +
+                    "/data/adb/service.d/$COMPAT_STAGE_NAME && ",
+            )
+            append("echo RMP_STAGE_FIX_OK")
         }
         val result = rootCommand(helper, installCommand)
         appendLog(
             if (result.output.contains("RMP_STAGE_FIX_OK")) {
-                "[+] Network repair re-applied on every userspace start"
+                "[+] Net + module repairs re-applied on every userspace start"
             } else {
-                "[!] Durable network repair incomplete: ${result.output.trim().take(200)}"
+                "[!] Durable stage repairs incomplete: ${result.output.trim().take(200)}"
             },
         )
 
-        val compat = AssetScriptRunner.run(
+        val compatResult = AssetScriptRunner.run(
             app,
             "module_compat.sh",
             helper = helper,
             timeoutSeconds = 60L,
         )
-        compat.output.lineSequence()
+        compatResult.output.lineSequence()
             .map { it.trim() }
             .filter { it.startsWith("RMP_COMPAT_OK:") || it.startsWith("RMP_COMPAT_FAIL:") }
             .forEach { appendLog("[*] $it") }
@@ -1310,6 +1323,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
         /** Common stage script that re-applies the SELinux SECMARK repair. */
         private const val NETFIX_STAGE_NAME = "00-rmp-netfix.sh"
+        private const val COMPAT_STAGE_NAME = "00-rmp-module-compat.sh"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
         private const val SHIZUKU_CVE_SU = "/data/local/tmp/su"
         private const val SHIZUKU_CVE_SOCKET = "/data/local/tmp/temp_su.sock"
