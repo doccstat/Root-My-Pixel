@@ -113,7 +113,7 @@ fi
 # one installed. Phase 1 reinstalls the bundled, version-matched copy on the
 # next root, so removing it here loses nothing. Best-effort per package: an
 # absent or foreign manager must not block the reboot.
-for manager in me.weishu.kernelsu com.resukisu.resukisu com.sukisu.ultra; do
+for manager in com.lixingchi.kernelsu me.weishu.kernelsu com.resukisu.resukisu com.sukisu.ultra; do
     if pm uninstall --user 0 "$manager" >/dev/null 2>&1; then
         echo "UNROOT_MANAGER_REMOVED:$manager"
     fi

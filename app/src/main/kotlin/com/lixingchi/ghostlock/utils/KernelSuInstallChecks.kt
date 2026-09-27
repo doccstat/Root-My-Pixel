@@ -36,10 +36,17 @@ internal object KernelSuInstallChecks {
     fun isTrustedManagerSignature(signature: ManagerSignature): Boolean =
         signature in TRUSTED_MANAGER_SIGNATURES
 
+    /**
+     * The DER certificate of whatever signed the manager the driver is built to
+     * trust. Our fork pins `com.lixingchi.kernelsu` signed with the GhostLock
+     * RSA-2048 key (0x034b bytes, sha256 ff8c...040050), so that is the only
+     * trusted entry - the upstream `me.weishu.kernelsu` manager (0x033b,
+     * c371...) is a different package and would not be accepted by the driver.
+     */
     private val TRUSTED_MANAGER_SIGNATURES = setOf(
         ManagerSignature(
-            size = 0x33b,
-            hash = "c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6",
+            size = 0x34b,
+            hash = "ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050",
         ),
     )
 }

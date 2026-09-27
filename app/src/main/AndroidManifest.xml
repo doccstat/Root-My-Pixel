@@ -15,7 +15,7 @@
 
     <queries>
         <package android:name="com.lixingchi.shizuku" />
-        <package android:name="me.weishu.kernelsu" />
+        <package android:name="com.lixingchi.kernelsu" />
     </queries>
 
     <application
