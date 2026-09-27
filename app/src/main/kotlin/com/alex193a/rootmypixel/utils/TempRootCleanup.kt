@@ -103,6 +103,8 @@ object TempRootCleanup {
             File(context.filesDir, "payloads"),
             File(context.filesDir, "scripts"),
             File(context.filesDir, "exploit.log"),
+            // Unpacked by the manual "Install bundled KernelSU Manager" path.
+            File(context.filesDir, "ksu-manager.apk"),
         )
         val removed = mutableListOf<String>()
         for (target in targets) {

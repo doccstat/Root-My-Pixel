@@ -1,12 +1,14 @@
 #!/system/bin/sh
 # Unroot and restore stock state for Root-My-Pixel.
 # Structured UNROOT_* markers are consumed by the Android UI.
-
-LOG_FILE="/data/local/tmp/unr00t.log"
-echo "=== Unroot started at $(date) ===" > "$LOG_FILE" 2>/dev/null || true
+#
+# Deliberately writes no log file of its own: /data/local/tmp is world-shared
+# and a root-owned file there is a trace that then has to be swept again. The
+# app captures this script's stdout and persists it to its own private
+# storage (files/unroot.log), which survives the reboot and needs no cleanup.
 
 log() {
-    echo "[$(date +%T)] $*" | tee -a "$LOG_FILE" 2>/dev/null || echo "[$(date +%T)] $*"
+    echo "[$(date +%T)] $*"
 }
 
 exec_root() {
