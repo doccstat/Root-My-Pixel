@@ -27,6 +27,32 @@ android {
         }
     }
 
+    // A stable signer for CI debug builds. AGP's default debug key is
+    // regenerated on every GitHub runner, so an APK signed with it can never be
+    // installed over a previous build (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
+    // CI materialises the same production keystore the manager uses
+    // (`KEYSTORE_FILE` + `KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`); local
+    // builds and fork PRs leave it unset and keep AGP's throwaway debug key.
+    signingConfigs {
+        val storePath = System.getenv("KEYSTORE_FILE")
+        if (storePath != null) {
+            create("ci") {
+                storeFile = file(storePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            if (System.getenv("KEYSTORE_FILE") != null) {
+                signingConfig = signingConfigs.getByName("ci")
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

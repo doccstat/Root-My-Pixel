@@ -114,6 +114,35 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Prepare the stable signing key
+        # A debug APK signed with the runner's throwaway debug keystore can never
+        # be installed as an update (INSTALL_FAILED_UPDATE_INCOMPATIBLE), so the
+        # same production key that signs the manager signs this APK too. Fork PRs
+        # cannot see the secret and keep AGP's default debug key.
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "::warning::No KEYSTORE secret; the PR build keeps AGP's throwaway debug key."
+              exit 0
+            fi
+            echo "::error::No KEYSTORE secret. This build would be signed with a throwaway key and could not be installed over a previous APK. Add KEYSTORE, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD (the values the KernelSU fork already uses)."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > key.jks
+          {
+            echo "KEYSTORE_FILE=$PWD/key.jks"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "KEY_ALIAS=$KEY_ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "Signing the debug APK with the stable key (alias $KEY_ALIAS)."
+
       - name: Assemble debug APK
         run: ./gradlew assembleDebug --stacktrace
 
@@ -126,6 +155,9 @@ jobs:
           fi
           echo "APK size: $(stat -c%s "$APK") bytes"
           ls -la "$APK"
+          if [ -n "${KEYSTORE_FILE:-}" ]; then
+            "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK"
+          fi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
