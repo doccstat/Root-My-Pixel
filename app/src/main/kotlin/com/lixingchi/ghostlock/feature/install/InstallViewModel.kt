@@ -36,6 +36,7 @@ import com.lixingchi.ghostlock.utils.AppBackupRunner
 import com.lixingchi.ghostlock.utils.AppBackupStore
 import com.lixingchi.ghostlock.utils.AssetScriptRunner
 import com.lixingchi.ghostlock.utils.BundledManager
+import com.lixingchi.ghostlock.utils.CrashRecoveryGuard
 import com.lixingchi.ghostlock.utils.OtaGuard
 import com.lixingchi.ghostlock.utils.TempRootCleanup
 import com.lixingchi.ghostlock.utils.UnrootCommandOutcome
@@ -581,6 +582,12 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         // ahead of this call.
         applyNetworkFix(helper, ksudDest)
 
+        // The driver load makes netd's handshake hang until the system_server
+        // watchdog kills the framework; CrashRecovery counts that restart as a
+        // boot and will roll back the pending modules if enough pile up. Clear
+        // its window as soon as root is available.
+        clearCrashRecoveryWindow(helper)
+
         // 6. Write the repairs that KernelSU re-executes from disk on every
         // userspace start, so they are still in place after any soft reboot and
         // before the module scripts of that start run. Must precede the first
@@ -883,6 +890,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         // installKernelSu); re-running is harmless and covers installs that
         // reused a live driver.
         applyNetworkFix(helper)
+        clearCrashRecoveryWindow(helper)
 
         val otaBlock = rootCommand(helper, OtaGuard.blockCommand())
         appendLog(
@@ -909,6 +917,26 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 appendLog("[!] Restore failed: $pkg ($reason)")
             }
         }
+    }
+
+    /**
+     * Clears Android's CrashRecovery restart counter.
+     *
+     * Loading the driver, and the netd handshake it breaks before
+     * [applyNetworkFix], both let the system_server watchdog kill the framework.
+     * `PackageWatchdog` counts each of those restarts as a boot, and five inside
+     * ten minutes make CrashRecovery roll back the pending mainline modules and
+     * force a real reboot, so the counter is cleared as soon as root exists and
+     * again around every soft reboot (see [CrashRecoveryGuard]).
+     */
+    private fun clearCrashRecoveryWindow(helper: File): Boolean {
+        val result = rootCommand(helper, CrashRecoveryGuard.clearCommand())
+        val ok = result.output.contains(CrashRecoveryGuard.OK)
+        appendLog(
+            if (ok) "[+] CrashRecovery restart window cleared"
+            else "[!] CrashRecovery window not cleared: ${result.output.trim().take(200)}",
+        )
+        return ok
     }
 
     /**

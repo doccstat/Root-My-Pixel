@@ -77,6 +77,11 @@ object SoftReboot {
         "  exit 1",
         "fi",
         "echo \"\$now\" > $LOCK_PATH 2>/dev/null || true",
+        // A system_server restart counts as a boot for CrashRecovery's watchdog,
+        // so clear the restart window before and after ours; otherwise the
+        // watchdog rolls back the pending mainline modules and force-reboots.
+        "echo \"[*] step 0: clearing the CrashRecovery restart window\"",
+        CrashRecoveryGuard.clearCommand(),
         "echo \"[*] step 1: restarting the framework only (zygote + system_server)\"",
         "setprop sys.boot_completed 0",
         "killall -9 system_server",
@@ -101,6 +106,8 @@ object SoftReboot {
         "  sleep 1",
         "done",
         "echo \"[*] framework back after \${i}s (reason=\$(getprop sys.boot.reason))\"",
+        "echo \"[*] clearing the CrashRecovery restart window again\"",
+        CrashRecoveryGuard.clearCommand(),
         "if [ -x \"$ksudPath\" ]; then",
         "  echo \"[*] step 3: KernelSU services + boot-completed stages\"",
         "  \"$ksudPath\" services",
