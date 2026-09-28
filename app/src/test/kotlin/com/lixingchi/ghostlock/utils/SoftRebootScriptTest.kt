@@ -94,6 +94,22 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun clearsTheCrashRecoveryWindowAroundTheRestart() {
+        // PackageWatchdog counts a system_server restart as a boot. Without
+        // clearing its window our own soft reboot can trip the boot-loop
+        // rollback, which reverts the pending mainline modules and force-reboots
+        // the device with reason reboot,rollback_staged_install.
+        val counter = "setprop ${CrashRecoveryGuard.RESCUE_BOOT_COUNT_PROP} 0"
+        val kill = script.indexOf("killall -9 system_server")
+        val first = script.indexOf(counter)
+        assertTrue("the window must be cleared before the kill", first in 0 until kill)
+        assertTrue(
+            "the restart we just caused must not count either",
+            script.lastIndexOf(counter) > kill,
+        )
+    }
+
+    @Test
     fun toleratesAMissingKsud() {
         assertTrue(script.contains("not found"))
     }
