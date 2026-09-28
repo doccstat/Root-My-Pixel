@@ -27,13 +27,20 @@ at late-load, which is what a profile's `kmi` field supplies. This used to be
 shipped as one file per KMI; those copies were byte-identical, so they were
 merged into this one.
 
-### manager/GhostLock_08a3b087_32653-release.apk
+### manager/GhostLock-manager.apk
 The GhostLock manager (`com.lixingchi.kernelsu`), built from our KernelSU fork
 (`depot/third-party/github/doccstat/KernelSU`) for the same release as
 `ksud/ksud`. The manager must match the late-loaded `kernelsu.ko`: the driver
 pins the manager's package name *and* its signing certificate, and the manager
 and `ksud` speak the same versioned UAPI, so a separately installed (possibly
 older or fork) manager can diverge.
+
+The file name is **stable and version-less on purpose**: `build-debug-apk.yml`
+replaces this asset in place with whatever the fork last published to its
+`ghostlock-latest` release (`GhostLock-manager.apk` + `manager.json`), and
+`BundledManager` reads the expected `versionCode` from the APK itself via
+`PackageManager.getPackageArchiveInfo` rather than a hardcoded constant. So a
+CI-refreshed manager needs no source change in this repo.
 
 sha256 `9b53179e06f3d2a9a0a500cd55a597895e43f345b9e83b6067bea982750c89ae`.
 Signer certificate SHA-256 is

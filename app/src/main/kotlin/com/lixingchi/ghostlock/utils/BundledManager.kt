@@ -1,6 +1,8 @@
 package com.lixingchi.ghostlock.utils
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import java.io.File
 
 /**
@@ -18,14 +20,19 @@ object BundledManager {
      */
     const val PACKAGE = "com.lixingchi.kernelsu"
 
-    /** `versionCode` of [ASSET_PATH]; every install is compared against it. */
-    const val VERSION_CODE = 32653L
-
-    const val ASSET_PATH = "manager/GhostLock_08a3b087_32653-release.apk"
+    /**
+     * Stable asset name for the bundled manager. The Root-My-Pixel CI replaces
+     * this file in place with whatever the KernelSU fork last published, so the
+     * name must not carry a version: the APK itself is the version source.
+     */
+    const val ASSET_PATH = "manager/GhostLock-manager.apk"
 
     /** Where the APK is staged for `pm install` by the root shell. */
     private const val STAGED_PATH = "/data/local/tmp/ksu-manager.apk"
     private const val CACHED_APK = "ksu-manager.apk"
+
+    @Volatile
+    private var bundledVersionCodeCache: Long? = null
 
     private val SIGNATURE_MISMATCH_MARKERS = listOf(
         "signatures do not match",
@@ -37,28 +44,44 @@ object BundledManager {
         context.packageManager.getPackageInfo(PACKAGE, 0).longVersionCode
     }.getOrNull()
 
-    fun isBundledVersionInstalled(context: Context): Boolean =
-        installedVersionCode(context) == VERSION_CODE
+    /**
+     * `versionCode` of the APK bundled in [ASSET_PATH], read from the archive
+     * itself so refreshing the asset in CI needs no code change. Returns null
+     * only when the asset is missing or unreadable.
+     */
+    fun bundledVersionCode(context: Context): Long? {
+        bundledVersionCodeCache?.let { return it }
+        val cached = ensureCached(context) ?: return null
+        val code = archiveVersionCode(context, cached.absolutePath)
+        if (code != null) bundledVersionCodeCache = code
+        return code
+    }
+
+    fun isBundledVersionInstalled(context: Context): Boolean {
+        val bundled = bundledVersionCode(context) ?: return false
+        return installedVersionCode(context) == bundled
+    }
 
     /**
      * Installs the bundled manager through the KernelSU root shell. This is the
      * single implementation used both by the install flow and by the retry on
      * the main screen, so there is only one way the manager ever gets installed.
      *
-     * @return true when [VERSION_CODE] is installed afterwards.
+     * @return true when the bundled manager is installed afterwards.
      */
     fun installViaRoot(
         context: Context,
         helper: File?,
         log: (String) -> Unit = {},
     ): Boolean {
+        val target = bundledVersionCode(context)
         val installed = installedVersionCode(context)
-        if (installed == VERSION_CODE) {
+        if (target != null && installed == target) {
             log("[+] KernelSU Manager $installed already installed")
             return true
         }
         log(
-            "[*] Installing bundled KernelSU Manager $VERSION_CODE " +
+            "[*] Installing bundled KernelSU Manager ${target ?: "(unreadable version)"} " +
                 "(device has ${installed ?: "none"})...",
         )
         val staged = stage(context, helper, log) ?: return false
@@ -72,7 +95,7 @@ object BundledManager {
         }
         RootShell.run("rm -f $staged", helper = helper)
         val now = installedVersionCode(context)
-        if (result.isOk && now == VERSION_CODE) {
+        if (result.isOk && now != null && (target == null || now == target)) {
             log("[+] KernelSU Manager $now installed")
             return true
         }
@@ -83,14 +106,29 @@ object BundledManager {
         return false
     }
 
-    private fun stage(context: Context, helper: File?, log: (String) -> Unit): String? {
+    private fun archiveVersionCode(context: Context, path: String): Long? = runCatching {
+        val flags = PackageManager.PackageInfoFlags.of(0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageArchiveInfo(path, flags)?.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageArchiveInfo(path, 0)?.longVersionCode
+        }
+    }.getOrNull()
+
+    /** Extracts the bundled APK into the app cache so `pm` can read it. */
+    private fun ensureCached(context: Context): File? = runCatching {
         val cached = File(context.cacheDir, CACHED_APK)
-        runCatching {
-            context.assets.open(ASSET_PATH).use { input ->
-                cached.outputStream().use { output -> input.copyTo(output) }
-            }
-        }.getOrElse {
-            log("[!] Bundled manager unpack failed: ${it.message}")
+        context.assets.open(ASSET_PATH).use { input ->
+            cached.outputStream().use { output -> input.copyTo(output) }
+        }
+        cached
+    }.getOrNull()
+
+    private fun stage(context: Context, helper: File?, log: (String) -> Unit): String? {
+        val cached = ensureCached(context)
+        if (cached == null) {
+            log("[!] Bundled manager unpack failed (asset ${ASSET_PATH} unreadable)")
             return null
         }
         val copy = RootShell.run(

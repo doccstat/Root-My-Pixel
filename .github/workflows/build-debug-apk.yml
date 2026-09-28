@@ -11,7 +11,7 @@ on:
   schedule:
     - cron: '23 7 * * *'
   repository_dispatch:
-    types: [ghostlock-ksud-published]
+    types: [ghostlock-ksud-published, ghostlock-manager-published]
   workflow_dispatch:
 
 permissions:
@@ -48,6 +48,33 @@ jobs:
             sha256sum app/src/main/assets/ksud/ksud
           else
             echo "::warning::Could not fetch a verified ksud release asset; keeping the committed asset."
+          fi
+          rm -rf "$tmp"
+
+      - name: Fetch the latest GhostLock manager from the KernelSU fork
+        env:
+          KSU_RELEASE_BASE: https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
+          MANAGER_PACKAGE: com.lixingchi.kernelsu
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          # The manager must be the signed build the fork's driver pins
+          # (com.lixingchi.kernelsu + our signer). Verify checksum, that the
+          # published metadata names that package, and that it is an APK
+          # before replacing the committed asset; otherwise keep the committed
+          # copy so the build never ships a mismatched manager.
+          if curl -fsSL -o "$tmp/GhostLock-manager.apk" "$KSU_RELEASE_BASE/GhostLock-manager.apk" &&
+             curl -fsSL -o "$tmp/GhostLock-manager.apk.sha256" "$KSU_RELEASE_BASE/GhostLock-manager.apk.sha256" &&
+             curl -fsSL -o "$tmp/manager.json" "$KSU_RELEASE_BASE/manager.json" &&
+             (cd "$tmp" && sha256sum -c --quiet GhostLock-manager.apk.sha256) &&
+             python3 -c "import json,sys; d=json.load(open('$tmp/manager.json')); sys.exit(0 if d.get('package')=='$MANAGER_PACKAGE' else 1)" &&
+             file "$tmp/GhostLock-manager.apk" | grep -qiE 'android package|zip archive'; then
+            install -m 0644 "$tmp/GhostLock-manager.apk" app/src/main/assets/manager/GhostLock-manager.apk
+            echo "Using manager from the KernelSU fork release:"
+            sha256sum app/src/main/assets/manager/GhostLock-manager.apk
+            cat "$tmp/manager.json"
+          else
+            echo "::warning::Could not fetch a verified manager release asset; keeping the committed manager."
           fi
           rm -rf "$tmp"
 
