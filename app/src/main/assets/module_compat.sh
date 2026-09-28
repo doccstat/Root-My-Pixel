@@ -114,6 +114,33 @@ PREFIX
     fi
 }
 
+# --- Vector's manager.apk must stay readable by the shell host --------------
+#
+# KernelSU leaves /data/adb/modules labelled `adb_data_file`, but Vector's
+# parasitic manager is injected into com.android.shell (u:r:shell:s0) and the
+# binder hand-off of manager.apk is judged against the *receiver*. shell may not
+# read adb_data_file, so the kernel drops the transfer, the host parses a null
+# PackageInfo and the manager dies with a NullPointerException
+# ("Parasitic injection failed") - the "Vector manager does not open" symptom.
+# Upstream's Magisk installer leaves the module tree `system_file`, which every
+# appdomain and coredomain may read; KernelSU does not, and a module reinstall
+# or a `/data/adb` restore resets it. Re-assert the label here, from the root
+# stage, because the daemon runs as system and cannot.
+#
+# `bin/` keeps Vector's own `xposed_file` label (its dex2oat wrappers).
+relabel_vector() {
+    if [ ! -d "$VECTOR_MOD" ]; then
+        echo "RMP_COMPAT_SKIP:vector-relabel-absent"
+        return 0
+    fi
+    chcon -R u:object_r:system_file:s0 "$VECTOR_MOD" 2>/dev/null
+    if [ -d "$VECTOR_MOD/bin" ]; then
+        chcon -R u:object_r:xposed_file:s0 "$VECTOR_MOD/bin" 2>/dev/null
+    fi
+    echo "RMP_COMPAT_OK:vector-relabel"
+}
+
 patch_zygisk
 patch_vector
+relabel_vector
 echo "RMP_COMPAT_END"
