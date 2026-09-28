@@ -91,9 +91,13 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # compileSdk 37 requires platform android-37
-          api-level: 37
-          cache: true
+          # This action defaults `packages` to `tools platform-tools`. The
+          # `tools` SDK package no longer exists, so `sdkmanager tools` exits 1
+          # and the whole action fails. Install only what the build needs;
+          # `api-level`/`cache` are not inputs of this action and were ignored.
+          packages: 'platform-tools platforms;android-37'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
 
       - name: Install NDK required by AGP 9.3.1
         # AGP 9.3.1 uses NDK 28.2.13676358 as default android.ndkVersion.
