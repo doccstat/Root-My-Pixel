@@ -91,11 +91,13 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # This action defaults `packages` to `tools platform-tools`. The
-          # `tools` SDK package no longer exists, so `sdkmanager tools` exits 1
-          # and the whole action fails. Install only what the build needs;
-          # `api-level`/`cache` are not inputs of this action and were ignored.
-          packages: 'platform-tools platforms;android-37'
+          # This action defaults `packages` to `tools platform-tools`; the
+          # `tools` SDK package is gone from the repository, so `sdkmanager
+          # tools` exits 1 and the whole action fails. Install only what the
+          # build needs. compileSdk 37 means the AGP 9 "minor API level" package
+          # `platforms;android-37.0` - plain `platforms;android-37` does not
+          # exist, and `api-level`/`cache` are not inputs of this action.
+          packages: 'platform-tools platforms;android-37.0'
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
 
