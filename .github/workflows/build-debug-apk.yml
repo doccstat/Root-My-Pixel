@@ -156,7 +156,17 @@ jobs:
           echo "APK size: $(stat -c%s "$APK") bytes"
           ls -la "$APK"
           if [ -n "${KEYSTORE_FILE:-}" ]; then
-            "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK"
+            # Resolve exactly one apksigner: the runner has more than one
+            # build-tools version, so a bare glob expands to several words and
+            # apksigner reads the second path as its subcommand.
+            SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+            APKSIGNER="$(find "$SDK/build-tools" -maxdepth 2 -name apksigner -type f 2>/dev/null | sort -V | tail -1)"
+            if [ -n "$APKSIGNER" ]; then
+              echo "apksigner: $APKSIGNER"
+              "$APKSIGNER" verify --print-certs "$APK"
+            else
+              echo "::warning::apksigner not found under $SDK/build-tools; skipping the signer printout."
+            fi
           fi
 
       - name: Upload debug APK
