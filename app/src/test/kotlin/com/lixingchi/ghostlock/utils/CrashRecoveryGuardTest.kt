@@ -30,6 +30,15 @@ class CrashRecoveryGuardTest {
     }
 
     @Test
+    fun clearsThePersistedMitigationCounts() {
+        // A non-zero observer mitigation count makes the next restart
+        // re-mitigate below the five-boot threshold, which is what pushed
+        // RescueParty to FACTORY_RESET on yogi.
+        assertTrue(command.contains(CrashRecoveryGuard.METADATA_PATH))
+        assertTrue(command.contains(CrashRecoveryGuard.WATCHDOG_XML))
+    }
+
+    @Test
     fun containsNoSingleQuoteToBreakTheShCWrapper() {
         assertTrue("the cleared command is embedded in sh -c quoting", !command.contains("'"))
     }
