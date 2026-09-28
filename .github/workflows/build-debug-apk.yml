@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
@@ -77,26 +77,26 @@ jobs:
           rm -rf "$tmp"
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           cache-disabled: false
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
-          # This action defaults `packages` to `tools platform-tools`; the
-          # `tools` SDK package is gone from the repository, so `sdkmanager
-          # tools` exits 1 and the whole action fails. Install only what the
-          # build needs. compileSdk 37 means the AGP 9 "minor API level" package
+          # v4 defaults `packages` to `platform-tools`; add the build's SDK.
+          # compileSdk 37 means the AGP 9 "minor API level" package
           # `platforms;android-37.0` - plain `platforms;android-37` does not
-          # exist, and `api-level`/`cache` are not inputs of this action.
+          # exist, and `api-level`/`cache` are not inputs of this action. (The
+          # old v3 failure was its default `tools platform-tools`: `tools` no
+          # longer exists in the SDK repo and `sdkmanager tools` exited 1.)
           packages: 'platform-tools platforms;android-37.0'
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
@@ -128,7 +128,7 @@ jobs:
           ls -la "$APK"
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
