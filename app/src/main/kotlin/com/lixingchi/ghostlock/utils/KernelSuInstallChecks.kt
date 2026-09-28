@@ -42,8 +42,11 @@ internal object KernelSuInstallChecks {
      * RSA-2048 key (0x034b bytes, sha256 ff8c...040050), so that is the only
      * trusted entry - the upstream `me.weishu.kernelsu` manager (0x033b,
      * c371...) is a different package and would not be accepted by the driver.
+     *
+     * `internal` so `BundledAssetsInvariantTest` can assert the shipped
+     * `assets/README.md` and this list never drift apart.
      */
-    private val TRUSTED_MANAGER_SIGNATURES = setOf(
+    internal val TRUSTED_MANAGER_SIGNATURES = setOf(
         ManagerSignature(
             size = 0x34b,
             hash = "ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050",

@@ -114,6 +114,23 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      # The unit tests encode the fork invariants (bundled payload/signer
+      # consistency, the stage-repair scripts, the allowlist layout). They were
+      # never run in CI, so a rebrand or asset bump could regress one silently.
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload unit test report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-report
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            app/build/test-results/testDebugUnitTest
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Prepare the stable signing key
         # A debug APK signed with the runner's throwaway debug keystore can never
         # be installed as an update (INSTALL_FAILED_UPDATE_INCOMPATIBLE), so the
