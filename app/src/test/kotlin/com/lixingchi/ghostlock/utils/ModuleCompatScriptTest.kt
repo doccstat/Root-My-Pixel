@@ -50,6 +50,19 @@ class ModuleCompatScriptTest {
     }
 
     @Test
+    fun `relabels vector so the parasitic manager can read manager apk`() {
+        val text = script()
+        // KernelSU leaves the module tree `adb_data_file`, which com.android.shell
+        // cannot read; the manager.apk binder hand-off is then dropped and the
+        // manager dies with "Parasitic injection failed". Re-assert `system_file`
+        // (with bin/ back to `xposed_file`) from the root stage.
+        assertTrue(text.contains("relabel_vector"))
+        assertTrue(text.contains("chcon -R u:object_r:system_file:s0 \"\$VECTOR_MOD\""))
+        assertTrue(text.contains("chcon -R u:object_r:xposed_file:s0 \"\$VECTOR_MOD/bin\""))
+        assertTrue(text.contains("RMP_COMPAT_OK:vector-relabel"))
+    }
+
+    @Test
     fun `is idempotent and reversible`() {
         val text = script()
         assertTrue(text.contains(".rmp-orig"))
