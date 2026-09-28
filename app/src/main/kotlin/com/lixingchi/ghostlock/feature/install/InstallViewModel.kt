@@ -4,7 +4,9 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.util.Base64
 import android.os.IBinder
+import android.os.Process
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,6 +25,7 @@ import com.lixingchi.ghostlock.domain.usecase.DownloadPayloadsUseCase
 import com.lixingchi.ghostlock.domain.usecase.ResolveTargetUseCase
 import com.lixingchi.ghostlock.shizuku.ExploitService
 import com.lixingchi.ghostlock.shizuku.IExploitService
+import com.lixingchi.ghostlock.utils.KernelSuAllowlist
 import com.lixingchi.ghostlock.utils.KernelSuInstallChecks
 import com.lixingchi.ghostlock.utils.KernelSuPresence
 import com.lixingchi.ghostlock.utils.NativeProbe
@@ -533,6 +536,23 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
                 rootCommand(helper, "ls -la $koDest").output.trim().take(200),
         )
 
+        // 3b. Pre-seed KernelSU's on-disk state *before* the driver is loaded.
+        // `insmod` is the last moment the exploit transport still works: as soon
+        // as the driver initialises it forces SELinux back to enforcing
+        // (`escape_to_root_for_init`), which denies the transport's socket. The
+        // only channel that survives is KernelSU's `su_compat`, which needs two
+        // things on disk:
+        //   * /data/adb/ksu/.allowlist — the caller UID must be an allowed
+        //     `app_profile`, and
+        //   * /data/adb/ksud — the kernel's execve hook opens this file before
+        //     it re-execs ksud as the target shell.
+        // On a fresh /data/adb (a clean install, or after the Unroot path
+        // removed it) neither exists, and `ksud install` cannot create them
+        // because it too runs through `su_compat`. Every later step then fails
+        // with "su: connect daemon: Permission denied", leaving the driver
+        // loaded with packet labelling broken and no network until a reboot.
+        preSeedKernelSu(helper, ksudDest)
+
         appendLog("[*] Loading kernelsu.ko (kmi=${payloads.kmi})...")
         val loadResult = rootCommand(helper, "$ksudDest insmod $koDest")
         if (loadResult.output.isNotBlank()) {
@@ -607,6 +627,65 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
     private fun installManagerIfNeeded(helper: File) {
         BundledManager.installViaRoot(app, helper, ::appendLog)
+    }
+
+    /**
+     * Writes the two files KernelSU's `su_compat` needs into `/data/adb`, using
+     * the exploit transport (still alive here):
+     *
+     *  - [KernelSuAllowlist.PATH], a v4 `app_profile` granting this app su.
+     *    KernelSU reads it during `insmod`, so the grant exists before the
+     *    driver forces SELinux back to enforcing and the transport's socket
+     *    dies. An existing valid file is appended to rather than replaced, so
+     *    grants made by a previously installed manager survive; the driver
+     *    de-duplicates by UID (`ksu_set_app_profile` overrides the match), so
+     *    re-running this is idempotent.
+     *  - [KSUD_PATH], a copy of the staged ksud. `su_compat` opens it before it
+     *    re-execs ksud as the target shell, and `ksud install` (its normal
+     *    creator) cannot run until `su_compat` works, so it must be seeded here.
+     *
+     * Everything is echoed behind `&&` so a partial write cannot report success.
+     */
+    private fun preSeedKernelSu(helper: File, ksudSource: String) {
+        val uid = Process.myUid()
+        val recordB64 = Base64.encodeToString(
+            KernelSuAllowlist.appProfile(app.packageName, uid),
+            Base64.NO_WRAP,
+        )
+        val fullB64 = Base64.encodeToString(
+            KernelSuAllowlist.newFile(app.packageName, uid),
+            Base64.NO_WRAP,
+        )
+        val path = KernelSuAllowlist.PATH
+        val command = buildString {
+            append("mkdir -p /data/adb/ksu && ")
+            append("if [ -s '$path' ]; then ")
+            append("printf '%s' '$recordB64' | base64 -d >> '$path'; ")
+            append("else ")
+            append("printf '%s' '$fullB64' | base64 -d > '$path'; ")
+            append("fi; ")
+            append("chown root:root '$path' && chmod 600 '$path' && ")
+            append("cp -f '$ksudSource' '$KSUD_PATH' && ")
+            append("chown root:root '$KSUD_PATH' && chmod 755 '$KSUD_PATH' && ")
+            append("echo RMP_ALLOWLIST_OK")
+        }
+        val result = rootCommand(helper, command)
+        val ok = result.output.contains("RMP_ALLOWLIST_OK")
+        appendLog(
+            if (ok) {
+                "[+] Pre-seeded the KernelSU allowlist (uid $uid) and $KSUD_PATH"
+            } else {
+                "[!] KernelSU pre-seed failed: ${result.output.trim().take(200)}"
+            },
+        )
+        // Fail here rather than after insmod: once the driver is loaded without
+        // these files there is no root channel left, the SECMARK repair cannot
+        // run, and the device is stuck with networking down until a reboot.
+        if (!ok) {
+            throw IllegalStateException(
+                app.getString(R.string.error_ksu_allowlist, result.output.trim().take(200)),
+            )
+        }
     }
 
     private fun verifyKernelSuLoaded(
