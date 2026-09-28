@@ -41,6 +41,22 @@ object CrashRecoveryGuard {
     const val BOOT_MITIGATION_COUNT_PROP = "crashrecovery.boot_mitigation_count"
 
     /**
+     * Persisted per-observer boot-mitigation counts. `PackageWatchdog` loads
+     * these into memory at every `noteBoot()`, and a non-zero value makes the
+     * *next* restart re-mitigate even below the five-boot threshold.
+     */
+    const val METADATA_PATH = "/metadata/watchdog/mitigation_count.txt"
+
+    /**
+     * The same counts are mirrored into the observer XML, which is read when
+     * `PackageWatchdog` is constructed (the metadata file is read later).
+     */
+    const val WATCHDOG_XML = "/data/system/package-watchdog.xml"
+
+    /** Scratch file used to rewrite [WATCHDOG_XML] without losing its inode. */
+    const val WATCHDOG_XML_TMP = "/data/local/tmp/.rmp-watchdog.xml"
+
+    /**
      * Clears the CrashRecovery restart window. Idempotent, root only.
      *
      * Called immediately before and immediately after the framework restart, so
@@ -48,11 +64,23 @@ object CrashRecoveryGuard {
      * counts toward the boot-loop threshold. Resetting the start also restarts
      * the ten-minute window, so a later `system_server` death cannot inherit
      * restarts from an earlier one.
+     *
+     * The persisted mitigation counts are cleared too. Without that, the
+     * exploit's own `system_server` deaths can reach `count > 1` while
+     * `performedMitigationsDuringWindow()` is still true, which re-mitigates
+     * immediately and drives RescueParty one level further - on `yogi` that
+     * escalated to `Finished rescue level FACTORY_RESET` and a `recovery` boot.
      */
     fun clearCommand(): String = """
         setprop $RESCUE_BOOT_COUNT_PROP 0 2>/dev/null || true
         setprop $RESCUE_BOOT_START_PROP 0 2>/dev/null || true
         setprop $BOOT_MITIGATION_COUNT_PROP 0 2>/dev/null || true
+        rm -f $METADATA_PATH 2>/dev/null || true
+        if [ -f $WATCHDOG_XML ]; then
+          sed "s/mitigation-count=\"[0-9]*\"/mitigation-count=\"0\"/g" $WATCHDOG_XML > $WATCHDOG_XML_TMP 2>/dev/null &&
+            cat $WATCHDOG_XML_TMP > $WATCHDOG_XML 2>/dev/null || true
+          rm -f $WATCHDOG_XML_TMP 2>/dev/null || true
+        fi
         echo $OK
     """.trimIndent()
 }
