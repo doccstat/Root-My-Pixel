@@ -482,6 +482,23 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         awaitDaemonSocket()
         diagnoseDaemon()
 
+        // Drop the exploit's virt-apex overlay while the daemon is up.
+        //
+        // The exploit mounts a tmpfs over /apex/com.android.virt/bin in the
+        // *shared* mount namespace so its su lands on PATH. That shadows the
+        // real APEX payload for every process: virtualizationservice cannot be
+        // exec'd, so the AVF KeyMint /avf service and the AppSearch
+        // virtualization services die until a reboot, and the stray
+        // /apex/com.android.virt/bin/su is a root signal. The overlay only has
+        // to survive the exploit itself, so detach every layer as soon as the
+        // root daemon is reachable - the daemon keeps running from the detached
+        // mount. Best effort: an older payload that mounts in the shared
+        // namespace is cleaned here; a newer one that keeps it private has
+        // nothing to drop and this is a no-op.
+        runCatching {
+            runHelper(helper, "-c", TempRootCleanup.unmountApexOverlayCommand())
+        }.onFailure { appendLog("[!] virt apex overlay teardown: $it") }
+
         // 2. Stage ksud via daemon root (cp + chmod + chown)
         appendLog("[*] Staging KernelSU binary...")
         val stageCmd = "cp '$ksudSource' $ksudDest && chmod 755 $ksudDest && " +
