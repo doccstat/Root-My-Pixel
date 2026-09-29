@@ -69,6 +69,19 @@ class TempRootCleanupTest {
     }
 
     @Test
+    fun `the overlay teardown acts in init's mount namespace`() {
+        val unmount = TempRootCleanup.unmountApexOverlayCommand()
+
+        // KernelSU's su can run a shell in a private mount namespace (per-app
+        // "individual" mode): a plain umount then only detaches the caller's
+        // copy and the shared overlay survives. The teardown must join init's
+        // namespace, with a fallback for a shell that already shares it.
+        assertTrue(unmount.contains("nsenter -t 1 -m umount ${TempRootCleanup.APEX_BIN}"))
+        assertTrue(unmount.contains("nsenter -t 1 -m grep -q"))
+        assertTrue(unmount.contains("|| umount ${TempRootCleanup.APEX_BIN}"))
+    }
+
+    @Test
     fun `a busy overlay is detached lazily`() {
         val unmount = TempRootCleanup.unmountApexOverlayCommand()
 
