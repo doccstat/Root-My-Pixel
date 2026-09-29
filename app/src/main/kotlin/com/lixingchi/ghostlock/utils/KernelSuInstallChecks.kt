@@ -15,6 +15,21 @@ internal object KernelSuInstallChecks {
     fun debugInfoShowsActiveKernelSu(output: String): Boolean =
         versionLine.containsMatchIn(output)
 
+    /**
+     * The `ksud insmod` invocation that loads the KMI-matched module.
+     *
+     * `allow_shell=1` mirrors `late-load --allow-shell`: it opens the driver's
+     * su path to uid 2000, so `adb shell` and anything Shizuku spawns can run
+     * `su`. KernelSU resolves su callers per UID (`__ksu_is_allow_uid`): the
+     * manager is always allowed, this app's UID has an explicit `app_profile`
+     * (see [KernelSuAllowlist]), and the shell UID has no other route - the
+     * module parameter defaults to false in a non-debug build. Without it the
+     * device is rooted for the app and the manager only, which is not what a
+     * normally rooted device looks like.
+     */
+    fun insmodCommand(ksudDest: String, koDest: String): String =
+        "$ksudDest insmod $koDest allow_shell=1"
+
     fun procModulesShowsActiveKernelSu(output: String): Boolean =
         kernelModuleLine.containsMatchIn(output)
 
