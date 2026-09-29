@@ -19,6 +19,8 @@ class TempRootCleanupTest {
         assertTrue(files.contains("/data/local/tmp/rt.log*"))
         assertTrue(files.contains("/data/local/tmp/.su.new*"))
         assertTrue(files.contains(TempRootCleanup.APEX_SU))
+        assertTrue(files.contains("/data/local/tmp/module_compat.sh"))
+        assertTrue(files.contains("/data/local/tmp/netfix.sh"))
         assertFalse(files.contains("/data/local/tmp/su"))
         assertFalse(files.contains("/data/local/tmp/temp_su.sock"))
     }

@@ -44,6 +44,12 @@ object TempRootCleanup {
         // Capture-side logcat dump, including every rotation, because a root
         // trace can land in any of them.
         "/data/local/tmp/rt.log*",
+        // RMP's own stage scripts do not belong in world-shared storage. The
+        // app stages them under its private dir (and copies them into
+        // /data/adb), but a manual device push leaves a root-owned copy here
+        // that names this app.
+        "/data/local/tmp/module_compat.sh",
+        "/data/local/tmp/netfix.sh",
         APEX_SU,
     )
 
