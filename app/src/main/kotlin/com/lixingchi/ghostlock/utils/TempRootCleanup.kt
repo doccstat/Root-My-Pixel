@@ -95,11 +95,12 @@ object TempRootCleanup {
         return tombstoneSweepCommand() + "; rm -rf " +
             targets.joinToString(" ") +
             " && { " + unmountApexOverlayCommand() + "; " +
-            inInitMountNs("grep -q \" $APEX_BIN \" /proc/mounts") + " || echo $SENTINEL; }"
+            apexOverlayPresentCommand() + " || echo $SENTINEL; }"
     }
 
     /**
-     * Unmounts the exploit's tmpfs overlay from [APEX_BIN].
+     * Unmounts the exploit's tmpfs overlay from [APEX_BIN] in every mount
+     * namespace that still carries it.
      *
      * The exploit does not just drop its daemon-backed `su` client there - it
      * mounts a tmpfs *over the directory* so the copy precedes `/system/bin` in
@@ -115,18 +116,77 @@ object TempRootCleanup {
      * in a loop is required to fully expose the payload again. A layer kept
      * busy by the exploit's own `su` daemon (its executable is mapped from the
      * mount) is detached with `umount -l`, which removes it from the namespace
-     * without waiting for the last user. Every step runs in init's mount
-     * namespace (see [inInitMountNs]); a no-op when the overlay is absent, and
-     * never fails the surrounding cleanup chain.
+     * without waiting for the last user.
+     *
+     * Acting in init's namespace alone is not enough. When the overlay is
+     * mounted in the shared namespace every app namespace is cloned from
+     * (zygote's), each app that starts afterwards unshares a *copy*. Private
+     * mounts are independent, so unmounting init's copy leaves the zygote and
+     * per-app copies in place: a detector running in an app - or the app itself
+     * - keeps seeing `/apex/com.android.virt/bin/su`, and AVF stays broken for
+     * those processes. The sweep walks every namespace that exposes the overlay
+     * (or its `su` file), deduplicates by mount-namespace inode, and detaches
+     * the layers inside each. It is a no-op when the overlay is absent and never
+     * fails the surrounding cleanup chain.
+     *
+     * The sweep runs twice. The namespace list is snapshotted when each pass
+     * starts, so an app that forks from a still-dirty parent *during* a pass
+     * clones the overlay after that pass has looked, and keeps it: on yogi one
+     * `com.google.android.videos` process survived exactly that way. The second
+     * pass, by which point the parent is clean, catches the straggler.
      */
     fun unmountApexOverlayCommand(): String =
+        "for _pass in 1 2; do " + namespaceOverlaySweep() + "; done"
+
+    /**
+     * One pass of [unmountApexOverlayCommand].
+     *
+     * A process whose mount namespace still has the overlay exposes it as
+     * `/proc/<pid>/root$APEX_SU`, so that path is a cheap proxy for "this
+     * namespace has the overlay": the file only exists inside the tmpfs. A
+     * namespace whose `su` was already unlinked - the caller's own, because
+     * [cleanupCommand] ran `rm -rf $APEX_SU` first - is covered by
+     * [initOverlayTeardownLoop].
+     */
+    private fun namespaceOverlaySweep(): String =
+        "seen=; " +
+            "for s in /proc/[0-9]*/root$APEX_SU; do " +
+            "[ -e \"\$s\" ] || continue; " +
+            "pid=\${s#/proc/}; pid=\${pid%%/*}; " +
+            "ns=\$(readlink /proc/\$pid/ns/mnt 2>/dev/null) || continue; " +
+            "case \" \$seen \" in *\" \$ns \"*) continue;; esac; " +
+            "seen=\"\$seen \$ns\"; " +
+            "for _ in 1 2 3 4 5 6 7 8; do " +
+            "nsenter -t \"\$pid\" -m umount $APEX_BIN 2>/dev/null || " +
+            "nsenter -t \"\$pid\" -m umount -l $APEX_BIN 2>/dev/null || break; " +
+            "done; " +
+            "done; " +
+            initOverlayTeardownLoop()
+
+    /**
+     * The init/shared-namespace leg of [unmountApexOverlayCommand].
+     *
+     * The caller usually runs in init's shared namespace (adbd does), so the
+     * `rm -rf $APEX_SU` in [cleanupCommand] has already removed the only file
+     * the namespace sweep keys on. This detaches the mount there directly, with a
+     * fallback to the caller's namespace for when KernelSU's `su` opened a
+     * private one.
+     */
+    private fun initOverlayTeardownLoop(): String =
         "for _ in 1 2 3 4 5 6 7 8; do " +
             inInitMountNs("grep -q \" $APEX_BIN \" /proc/mounts") + " || break; " +
             inInitMountNs("umount $APEX_BIN") + " || " +
             inInitMountNs("umount -l $APEX_BIN") + " || break; " +
             "done"
 
-    /** `nsenter` into init's mount namespace, where the overlay really lives. */
+    /**
+     * True (exit 0) when any mount namespace still exposes the overlay, so
+     * [cleanupCommand] emits [SENTINEL] only when the overlay is really gone.
+     */
+    private fun apexOverlayPresentCommand(): String =
+        "grep -q \" $APEX_BIN \" /proc/[0-9]*/mountinfo 2>/dev/null"
+
+    /** `nsenter` into init's (shared) mount namespace. */
     private const val INIT_MNT_NS = "nsenter -t 1 -m"
 
     /**
@@ -137,9 +197,9 @@ object TempRootCleanup {
      * per-app "individual" mount-namespace mode in the manager. A plain
      * `umount` then only detaches the caller's copy while the shared mount the
      * exploit created survives, so cleanup reports success and AVF stays
-     * broken. The exploit's overlay is always in the shared namespace (init,
-     * adbd and adb shell all read `mnt:[4026531841]` on yogi), so the teardown
-     * has to act there.
+     * broken. adbd shares init's namespace on yogi (`mnt:[4026531841]`), so
+     * targeting init covers the leg that a private shell would otherwise miss;
+     * [unmountApexOverlayCommand] handles the namespace copies themselves.
      */
     private fun inInitMountNs(command: String): String =
         "$INIT_MNT_NS $command 2>/dev/null || $command 2>/dev/null"
