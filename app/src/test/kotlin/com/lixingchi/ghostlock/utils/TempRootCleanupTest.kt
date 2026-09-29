@@ -49,7 +49,6 @@ class TempRootCleanupTest {
         // Deleting APEX_SU is not enough: the tmpfs the exploit mounted over
         // the directory shadows virtualizationservice until it is unmounted.
         assertTrue(command.contains("umount ${TempRootCleanup.APEX_BIN}"))
-        assertTrue(command.contains("grep -q \" ${TempRootCleanup.APEX_BIN} \" /proc/mounts"))
         // The overlay stacks once per exploit run, so a single umount leaves a
         // layer behind; the loop is what fully exposes the APEX payload.
         assertTrue(command.contains("for _ in 1 2 3 4 5 6 7 8; do"))
@@ -60,24 +59,28 @@ class TempRootCleanupTest {
     @Test
     fun `the sentinel is emitted only once the overlay is gone`() {
         val command = TempRootCleanup.cleanupCommand(includeTransport = true)
-        val guard = "grep -q \" ${TempRootCleanup.APEX_BIN} \" /proc/mounts 2>/dev/null || " +
-            "echo ${TempRootCleanup.SENTINEL}"
+        val guard =
+            "grep -q \" ${TempRootCleanup.APEX_BIN} \" /proc/[0-9]*/mountinfo 2>/dev/null || " +
+                "echo ${TempRootCleanup.SENTINEL}"
 
-        // A best-effort unmount that leaves a layer behind must not read as a
-        // successful cleanup.
+        // A best-effort unmount that leaves a layer behind - in any namespace -
+        // must not read as a successful cleanup.
         assertTrue(command.contains(guard))
     }
 
     @Test
-    fun `the overlay teardown acts in init's mount namespace`() {
+    fun `the overlay teardown sweeps every mount namespace`() {
         val unmount = TempRootCleanup.unmountApexOverlayCommand()
 
-        // KernelSU's su can run a shell in a private mount namespace (per-app
-        // "individual" mode): a plain umount then only detaches the caller's
-        // copy and the shared overlay survives. The teardown must join init's
-        // namespace, with a fallback for a shell that already shares it.
+        // The overlay can survive as a *copy* in zygote's namespace and in every
+        // app namespace cloned from it, where an init-only teardown never looks.
+        // Each namespace is visited once, keyed by its mount-namespace inode.
+        assertTrue(unmount.contains(TempRootCleanup.APEX_SU))
+        assertTrue(unmount.contains("readlink /proc/\$pid/ns/mnt"))
+        assertTrue(unmount.contains("nsenter -t \"\$pid\" -m umount ${TempRootCleanup.APEX_BIN}"))
+        // Namespaces whose `su` was already unlinked (the caller's own) are
+        // still covered by the init leg.
         assertTrue(unmount.contains("nsenter -t 1 -m umount ${TempRootCleanup.APEX_BIN}"))
-        assertTrue(unmount.contains("nsenter -t 1 -m grep -q"))
         assertTrue(unmount.contains("|| umount ${TempRootCleanup.APEX_BIN}"))
     }
 
@@ -95,7 +98,9 @@ class TempRootCleanupTest {
     fun `unmount command is a no-op loop that cannot fail the chain`() {
         val unmount = TempRootCleanup.unmountApexOverlayCommand()
 
-        assertTrue(unmount.startsWith("for _ in 1 2 3 4 5 6 7 8; do "))
+        // Two passes: an app that forks from a dirty parent mid-sweep clones the
+        // overlay after the first pass has looked, and only the second catches it.
+        assertTrue(unmount.startsWith("for _pass in 1 2; do seen=; for s in /proc/[0-9]*/root"))
         assertTrue(unmount.endsWith("done"))
         assertFalse(unmount.contains("exit"))
     }

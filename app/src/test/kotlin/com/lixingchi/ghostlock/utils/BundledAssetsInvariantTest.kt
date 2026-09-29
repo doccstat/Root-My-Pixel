@@ -127,7 +127,13 @@ class BundledAssetsInvariantTest {
         )
         assertTrue(
             "unroot.sh must still fail loud when the overlay survives",
-            unroot.contains("grep -q \" /apex/com.android.virt/bin \" /proc/mounts 2>/dev/null && exit 1"),
+            unroot.contains(
+                "grep -q \" /apex/com.android.virt/bin \" /proc/[0-9]*/mountinfo 2>/dev/null && exit 1",
+            ),
+        )
+        assertTrue(
+            "unroot.sh must sweep the overlay out of every mount namespace, not just init's",
+            unroot.contains("nsenter -t \"\$pid\" -m umount /apex/com.android.virt/bin"),
         )
     }
 

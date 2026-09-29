@@ -277,7 +277,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val outcome = TempRootCleanup.run(
                 includeTransport = true,
                 helper = helper,
-                timeoutSeconds = ROOT_PROBE_TIMEOUT_SECONDS,
+                timeoutSeconds = CLEANUP_TIMEOUT_SECONDS,
             )
             if (outcome.success) {
                 appendUnrootLog("[+] Removed the temporary exploit files and transport")
@@ -855,6 +855,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private const val COMMAND_TIMEOUT_SECONDS = 90L
         private const val COMMAND_TIMEOUT_CODE = 124
         private const val ROOT_PROBE_TIMEOUT_SECONDS = 10L
+        // The cleanup sweeps the virt-apex overlay in every mount namespace
+        // (twice), which can mean hundreds of nsenter calls on a long-running
+        // device; 60s is a ceiling for a hung provider, not the normal runtime.
+        private const val CLEANUP_TIMEOUT_SECONDS = 60L
         private const val ROOT_ID_COMMAND = "id -u"
         private const val KERNEL_SU_PATH = "/system/bin/su"
         private val SU_CANDIDATES = listOf(KERNEL_SU_PATH, "su")
