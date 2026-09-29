@@ -39,6 +39,27 @@ class SoftRebootScriptTest {
             "the generated script must not contain a single quote",
             !script.contains("'"),
         )
+        val withRepairs = SoftReboot.buildScript(compatScript = "/data/user/0/x/files/scripts/module_compat.sh")
+        assertTrue(
+            "the repair step must not introduce a single quote either",
+            !withRepairs.contains("'"),
+        )
+    }
+
+    @Test
+    fun runsThePlatformRepairsBeforeTheFrameworkRestart() {
+        val compat = "/data/user/0/x/files/scripts/module_compat.sh"
+        val withRepairs = SoftReboot.buildScript(compatScript = compat)
+        // The ashmem boot-id node must exist before system_server (and the apps
+        // it forks) comes back, or an app that starts in that window dies in
+        // Bitmap_copyAshmem. The default script (no repairs staged) stays valid
+        // for callers that do not have a Context.
+        assertTrue(withRepairs.contains("sh \"$compat\""))
+        assertTrue(
+            "repairs must run before the framework is killed",
+            withRepairs.indexOf("sh \"$compat\"") < withRepairs.indexOf("killall -9 system_server"),
+        )
+        assertTrue(script.indexOf("module_compat.sh") == -1)
     }
 
     @Test
