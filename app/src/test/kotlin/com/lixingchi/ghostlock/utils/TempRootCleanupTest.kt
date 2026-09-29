@@ -58,6 +58,27 @@ class TempRootCleanupTest {
     }
 
     @Test
+    fun `the sentinel is emitted only once the overlay is gone`() {
+        val command = TempRootCleanup.cleanupCommand(includeTransport = true)
+        val guard = "grep -q \" ${TempRootCleanup.APEX_BIN} \" /proc/mounts 2>/dev/null || " +
+            "echo ${TempRootCleanup.SENTINEL}"
+
+        // A best-effort unmount that leaves a layer behind must not read as a
+        // successful cleanup.
+        assertTrue(command.contains(guard))
+    }
+
+    @Test
+    fun `a busy overlay is detached lazily`() {
+        val unmount = TempRootCleanup.unmountApexOverlayCommand()
+
+        // The exploit's own su daemon keeps its executable mapped from the
+        // mount, so a plain umount can fail with EBUSY; the lazy detach still
+        // removes the layer from the namespace.
+        assertTrue(unmount.contains("umount -l ${TempRootCleanup.APEX_BIN}"))
+    }
+
+    @Test
     fun `unmount command is a no-op loop that cannot fail the chain`() {
         val unmount = TempRootCleanup.unmountApexOverlayCommand()
 

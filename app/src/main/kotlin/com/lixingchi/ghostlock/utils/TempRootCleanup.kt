@@ -80,12 +80,22 @@ object TempRootCleanup {
         return Outcome(result.output.contains(SENTINEL), result.output)
     }
 
-    /** The exact shell command handed to KernelSU's `su`. */
+    /**
+     * The exact shell command handed to KernelSU's `su`.
+     *
+     * [SENTINEL] is the success marker [run] keys on, so it is emitted only
+     * when the virt-apex overlay is actually gone: a best-effort unmount that
+     * leaves a layer behind must not read as "cleaned". The earlier form echoed
+     * it unconditionally, so a busy layer (the exploit's `su` daemon keeps its
+     * executable mapped from the mount) could survive while cleanup reported
+     * success.
+     */
     fun cleanupCommand(includeTransport: Boolean, extraPaths: List<String> = emptyList()): String {
         val targets = files(includeTransport) + extraPaths
         return tombstoneSweepCommand() + "; rm -rf " +
             targets.joinToString(" ") +
-            " && { " + unmountApexOverlayCommand() + "; echo $SENTINEL; }"
+            " && { " + unmountApexOverlayCommand() + "; " +
+            "grep -q \" $APEX_BIN \" /proc/mounts 2>/dev/null || echo $SENTINEL; }"
     }
 
     /**
@@ -102,13 +112,17 @@ object TempRootCleanup {
      * AppSearch `virtualizationmaintenance` service `IsolatedStorageService`
      * uses, both disappear until a real reboot. The exploit mounts the overlay
      * once per run, so repeated exploit attempts leave it *stacked*; unmounting
-     * in a loop is required to fully expose the payload again. A no-op when the
-     * overlay is absent, and never fails the surrounding cleanup chain.
+     * in a loop is required to fully expose the payload again. A layer kept
+     * busy by the exploit's own `su` daemon (its executable is mapped from the
+     * mount) is detached with `umount -l`, which removes it from the namespace
+     * without waiting for the last user. A no-op when the overlay is absent, and
+     * never fails the surrounding cleanup chain.
      */
     fun unmountApexOverlayCommand(): String =
         "for _ in 1 2 3 4 5 6 7 8; do " +
             "grep -q \" $APEX_BIN \" /proc/mounts 2>/dev/null || break; " +
-            "umount $APEX_BIN 2>/dev/null || break; " +
+            "umount $APEX_BIN 2>/dev/null || " +
+            "umount -l $APEX_BIN 2>/dev/null || break; " +
             "done"
 
     /**

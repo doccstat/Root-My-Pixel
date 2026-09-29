@@ -25,6 +25,9 @@ ls src/targets/
 2. **Root daemon** — spawns via `call_usermodehelper`
    - Listens on Unix socket for commands
    - Launches `ksud late-load` to install KernelSU
+   - Installs its `su` (and the tmpfs that carries it) inside a *private* mount
+     namespace, so it never shadows `/apex/com.android.virt/bin` for the rest of
+     the system; the shared namespace is left untouched
 
 3. **KernelSU late-load** — uses vanilla KernelSU
    - Loads via standard `init_module` syscall
