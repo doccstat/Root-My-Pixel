@@ -95,7 +95,7 @@ object TempRootCleanup {
         return tombstoneSweepCommand() + "; rm -rf " +
             targets.joinToString(" ") +
             " && { " + unmountApexOverlayCommand() + "; " +
-            "grep -q \" $APEX_BIN \" /proc/mounts 2>/dev/null || echo $SENTINEL; }"
+            inInitMountNs("grep -q \" $APEX_BIN \" /proc/mounts") + " || echo $SENTINEL; }"
     }
 
     /**
@@ -115,15 +115,34 @@ object TempRootCleanup {
      * in a loop is required to fully expose the payload again. A layer kept
      * busy by the exploit's own `su` daemon (its executable is mapped from the
      * mount) is detached with `umount -l`, which removes it from the namespace
-     * without waiting for the last user. A no-op when the overlay is absent, and
+     * without waiting for the last user. Every step runs in init's mount
+     * namespace (see [inInitMountNs]); a no-op when the overlay is absent, and
      * never fails the surrounding cleanup chain.
      */
     fun unmountApexOverlayCommand(): String =
         "for _ in 1 2 3 4 5 6 7 8; do " +
-            "grep -q \" $APEX_BIN \" /proc/mounts 2>/dev/null || break; " +
-            "umount $APEX_BIN 2>/dev/null || " +
-            "umount -l $APEX_BIN 2>/dev/null || break; " +
+            inInitMountNs("grep -q \" $APEX_BIN \" /proc/mounts") + " || break; " +
+            inInitMountNs("umount $APEX_BIN") + " || " +
+            inInitMountNs("umount -l $APEX_BIN") + " || break; " +
             "done"
+
+    /** `nsenter` into init's mount namespace, where the overlay really lives. */
+    private const val INIT_MNT_NS = "nsenter -t 1 -m"
+
+    /**
+     * Runs [command] first in init's mount namespace and, if that is
+     * unavailable, in the caller's.
+     *
+     * KernelSU's `su` can run a shell in a *private* mount namespace - the
+     * per-app "individual" mount-namespace mode in the manager. A plain
+     * `umount` then only detaches the caller's copy while the shared mount the
+     * exploit created survives, so cleanup reports success and AVF stays
+     * broken. The exploit's overlay is always in the shared namespace (init,
+     * adbd and adb shell all read `mnt:[4026531841]` on yogi), so the teardown
+     * has to act there.
+     */
+    private fun inInitMountNs(command: String): String =
+        "$INIT_MNT_NS $command 2>/dev/null || $command 2>/dev/null"
 
     /**
      * Crash dumps of the forked native probe are the one artefact that outlives
