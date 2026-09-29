@@ -115,6 +115,23 @@ class BundledAssetsInvariantTest {
     }
 
     @Test
+    fun `unroot script unmounts every layer of the exploit virt apex overlay`() {
+        val unroot = File(assets, "unroot.sh").readText()
+
+        // The exploit stacks a tmpfs over /apex/com.android.virt/bin once per
+        // run; a single umount leaves a layer shadowing virtualizationservice.
+        assertTrue(
+            "unroot.sh does not loop the virt apex umount",
+            unroot.contains("for _ in 1 2 3 4 5 6 7 8; do") &&
+                unroot.contains("umount /apex/com.android.virt/bin"),
+        )
+        assertTrue(
+            "unroot.sh must still fail loud when the overlay survives",
+            unroot.contains("grep -q \" /apex/com.android.virt/bin \" /proc/mounts 2>/dev/null && exit 1"),
+        )
+    }
+
+    @Test
     fun `the trusted manager signer in code is the one documented`() {
         val signatures = KernelSuInstallChecks.TRUSTED_MANAGER_SIGNATURES
         assertTrue(signatures.isNotEmpty())

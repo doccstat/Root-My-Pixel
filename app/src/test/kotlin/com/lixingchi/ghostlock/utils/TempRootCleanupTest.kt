@@ -36,8 +36,32 @@ class TempRootCleanupTest {
         val command = TempRootCleanup.cleanupCommand(includeTransport = true)
 
         assertTrue(command.contains("rm -rf "))
-        assertTrue(command.endsWith("&& echo ${TempRootCleanup.SENTINEL}"))
+        assertTrue(command.endsWith("echo ${TempRootCleanup.SENTINEL}; }"))
         assertFalse(command.contains("/data/local/tmp/*"))
+    }
+
+    @Test
+    fun `command unmounts the stacked exploit overlay over the virt apex`() {
+        val command = TempRootCleanup.cleanupCommand(includeTransport = false)
+
+        // Deleting APEX_SU is not enough: the tmpfs the exploit mounted over
+        // the directory shadows virtualizationservice until it is unmounted.
+        assertTrue(command.contains("umount ${TempRootCleanup.APEX_BIN}"))
+        assertTrue(command.contains("grep -q \" ${TempRootCleanup.APEX_BIN} \" /proc/mounts"))
+        // The overlay stacks once per exploit run, so a single umount leaves a
+        // layer behind; the loop is what fully exposes the APEX payload.
+        assertTrue(command.contains("for _ in 1 2 3 4 5 6 7 8; do"))
+        // Never block the payload sweep on a busy or absent overlay.
+        assertTrue(command.contains("|| break"))
+    }
+
+    @Test
+    fun `unmount command is a no-op loop that cannot fail the chain`() {
+        val unmount = TempRootCleanup.unmountApexOverlayCommand()
+
+        assertTrue(unmount.startsWith("for _ in 1 2 3 4 5 6 7 8; do "))
+        assertTrue(unmount.endsWith("done"))
+        assertFalse(unmount.contains("exit"))
     }
 
     @Test

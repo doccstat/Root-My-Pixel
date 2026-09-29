@@ -63,7 +63,7 @@ cleanup_step() {
 
 echo "UNROOT_IDENTITY:uid=$(id -u):context=$(id -Z 2>/dev/null || true)"
 cleanup_step data-adb /system/bin/sh -c '\''rm -rf /data/adb && [ ! -e /data/adb ]'\''
-cleanup_step apex-mount /system/bin/sh -c '\''grep -q " /apex/com.android.virt/bin " /proc/mounts 2>/dev/null || exit 0; umount /apex/com.android.virt/bin'\''
+cleanup_step apex-mount /system/bin/sh -c '\''for _ in 1 2 3 4 5 6 7 8; do grep -q " /apex/com.android.virt/bin " /proc/mounts 2>/dev/null || break; umount /apex/com.android.virt/bin 2>/dev/null || break; done; grep -q " /apex/com.android.virt/bin " /proc/mounts 2>/dev/null && exit 1; exit 0'\''
 cleanup_step selinux /system/bin/sh -c '\''[ "$(getenforce 2>/dev/null)" = "Enforcing" ] || { setenforce 1 && [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; }'\''
 cleanup_step cve-app rm -f /data/local/tmp/cve-2026-43499-app.so
 cleanup_step cve-root rm -f /data/local/tmp/cve-2026-43499-root
