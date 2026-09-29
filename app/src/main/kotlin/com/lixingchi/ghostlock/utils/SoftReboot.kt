@@ -51,13 +51,31 @@ object SoftReboot {
         timeoutSeconds: Long = 10L,
     ): RootShell.Result {
         val log = File(context.filesDir, LOG_NAME)
+        // Re-stage the platform repairs so this run uses the copy from the
+        // installed app rather than one left on /data/adb by an older build:
+        // an app update can add a repair (the ashmem boot-id node was one) and
+        // a soft reboot has to apply it. It runs before the framework restart,
+        // so no app can come up against stale device nodes.
+        val compat = runCatching {
+            AssetScriptRunner.stage(context, "module_compat.sh").absolutePath
+        }.getOrNull()
         val command =
-            "setsid sh -c '${buildScript(ksudPath)}' </dev/null >> '${log.absolutePath}' 2>&1 &"
+            "setsid sh -c '${buildScript(ksudPath, compat)}' </dev/null >> '${log.absolutePath}' 2>&1 &"
         return RootShell.run(command, helper = helper, timeoutSeconds = timeoutSeconds)
     }
 
-    internal fun buildScript(ksudPath: String = DEFAULT_KSUD_PATH): String = listOf(
-        "echo \"===== soft reboot start \$(date +%s) =====\"",
+    internal fun buildScript(
+        ksudPath: String = DEFAULT_KSUD_PATH,
+        compatScript: String? = null,
+    ): String {
+        val steps = mutableListOf<String>()
+        steps += "echo \"===== soft reboot start \$(date +%s) =====\""
+        if (compatScript != null) {
+            // No single quotes: the whole script is embedded in `sh -c '...'`.
+            steps += "echo \"[*] step 0: platform repairs before the framework restart\""
+            steps += "sh \"$compatScript\" || echo \"[-] module_compat.sh exited \$?\""
+        }
+        steps += listOf(
         "echo \"[*] before: boot_completed=\$(getprop sys.boot_completed) reason=\$(getprop sys.boot.reason)\"",
         "echo \"[*] boot history:\"",
         "getprop persist.sys.boot.reason.history",
@@ -116,5 +134,7 @@ object SoftReboot {
         "  echo \"[*] boot-completed returned \$?\"",
         "fi",
         "echo \"===== soft reboot done \$(date +%s) reason=\$(getprop sys.boot.reason) =====\"",
-    ).joinToString("\n")
+        )
+        return steps.joinToString("\n")
+    }
 }
