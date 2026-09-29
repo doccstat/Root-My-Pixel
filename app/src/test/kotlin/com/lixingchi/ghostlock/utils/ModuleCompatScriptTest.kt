@@ -71,6 +71,24 @@ class ModuleCompatScriptTest {
     }
 
     @Test
+    fun `recreates the missing ashmem boot-id node`() {
+        val text = script()
+        // libcutils opens "/dev/ashmem" + /proc/sys/kernel/random/boot_id, not
+        // /dev/ashmem. When a userspace restart rotates the boot_id the node is
+        // gone, ashmem_create_region() fails with ENOENT and libhwui's
+        // Bitmap.asShared derefs the null region (SIGSEGV, fault 0x88). The
+        // repair has to run from the stage scripts, not the app, because the
+        // failing apps start before this app is alive again.
+        assertTrue(text.contains("repair_ashmem"))
+        assertTrue(text.contains("/proc/sys/kernel/random/boot_id"))
+        assertTrue(text.contains("/dev/ashmem\$boot_id"))
+        assertTrue(text.contains("mknod"))
+        assertTrue(text.contains("u:object_r:ashmem_libcutils_device:s0"))
+        assertTrue(text.contains("RMP_COMPAT_OK:ashmem-node"))
+        assertTrue(text.contains("\nrepair_ashmem\n"))
+    }
+
+    @Test
     fun `signals each outcome`() {
         val text = script()
         assertTrue(text.contains("RMP_COMPAT_OK:"))
