@@ -57,4 +57,15 @@ class KernelSuInstallChecksTest {
         assertFalse(KernelSuInstallChecks.isTrustedManagerSignature(unknown!!))
         assertNull(KernelSuInstallChecks.parseManagerSignature("signature unavailable"))
     }
+
+    @Test
+    fun `the module is loaded with the shell grant`() {
+        assertEquals(
+            "/data/adb/ksud insmod /data/adb/modules/kernelsu.ko allow_shell=1",
+            KernelSuInstallChecks.insmodCommand(
+                "/data/adb/ksud",
+                "/data/adb/modules/kernelsu.ko",
+            ),
+        )
+    }
 }

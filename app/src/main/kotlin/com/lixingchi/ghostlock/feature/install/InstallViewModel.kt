@@ -572,7 +572,10 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
         preSeedKernelSu(helper, ksudDest)
 
         appendLog("[*] Loading kernelsu.ko (kmi=${payloads.kmi})...")
-        val loadResult = rootCommand(helper, "$ksudDest insmod $koDest")
+        val loadResult = rootCommand(
+            helper,
+            KernelSuInstallChecks.insmodCommand(ksudDest, koDest),
+        )
         if (loadResult.output.isNotBlank()) {
             appendLog(loadResult.output.take(2000))
         }
