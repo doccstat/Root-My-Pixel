@@ -26,6 +26,45 @@ backup_once() {
     [ -f "$1.rmp-orig" ] || cp -f "$1" "$1.rmp-orig"
 }
 
+# --- /dev/ashmem<boot_id> is missing after a userspace restart --------------
+#
+# libcutils does not open /dev/ashmem. It opens "/dev/ashmem" + the boot_id that
+# /proc/sys/kernel/random/boot_id reports, so a reboot invalidates stale ashmem
+# handles; the kernel creates that node once. As soon as a userspace restart
+# rotates the boot_id the node no longer matches, ashmem_create_region() fails
+# with ENOENT and every ashmem user breaks: libhwui's Bitmap.asShared derefs the
+# null region and the app dies with SIGSEGV fault 0x88 in Bitmap_copyAshmem
+# (Oura's shortcut registration is the reproducible case), while CursorWindow
+# silently falls back to the heap. Recreate the node from /dev/ashmem's own
+# major/minor. Idempotent, and a no-op on a cold boot.
+repair_ashmem() {
+    boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+    case "$boot_id" in
+        ""|*[!0-9a-fA-F-]*)
+            echo "RMP_COMPAT_FAIL:ashmem-boot-id"
+            return 0
+            ;;
+    esac
+    node="/dev/ashmem$boot_id"
+    if [ -c "$node" ]; then
+        echo "RMP_COMPAT_OK:ashmem-node"
+        return 0
+    fi
+    # Read the device numbers off /dev/ashmem instead of assuming minor 259.
+    set -- $(ls -l /dev/ashmem 2>/dev/null | awk '{ gsub(/,/, "", $5); print $5, $6 }')
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        set -- 10 259
+    fi
+    mknod "$node" c "$1" "$2" 2>/dev/null
+    chmod 666 "$node" 2>/dev/null
+    chcon u:object_r:ashmem_libcutils_device:s0 "$node" 2>/dev/null
+    if [ -c "$node" ]; then
+        echo "RMP_COMPAT_OK:ashmem-node-created"
+    else
+        echo "RMP_COMPAT_FAIL:ashmem-node"
+    fi
+}
+
 # --- NeoZygisk post-fs-data is not idempotent -------------------------------
 #
 # Its `rm -rf $TMP_PATH` unlinks the *live* daemon's `cp64.sock` while the
@@ -140,6 +179,7 @@ relabel_vector() {
     echo "RMP_COMPAT_OK:vector-relabel"
 }
 
+repair_ashmem
 patch_zygisk
 patch_vector
 relabel_vector

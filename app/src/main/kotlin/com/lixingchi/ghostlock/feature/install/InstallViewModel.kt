@@ -978,6 +978,10 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      *    module `service.sh` can restart system_server and redo the netd
      *    handshake.
      *  - `module_compat.sh` is copied to both `.d` directories as well. It makes
+     *    the app-visible ashmem node match the current boot_id again (libcutils
+     *    opens "/dev/ashmem" + `/proc/sys/kernel/random/boot_id`; once a
+     *    userspace restart rotates that id every ashmem_create_region() fails
+     *    with ENOENT and libhwui's Bitmap.asShared segfaults, fault 0x88), makes
      *    NeoZygisk's post-fs-data idempotent (its unconditional wipe unlinked a
      *    live daemon's socket, after which no Zygisk module ever loaded), gives
      *    Vector's `service.sh` an `unshare` that understands `--propagation`,
