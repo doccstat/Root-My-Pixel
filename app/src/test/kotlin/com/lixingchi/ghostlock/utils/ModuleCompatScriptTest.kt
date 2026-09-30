@@ -46,7 +46,19 @@ class ModuleCompatScriptTest {
         val text = script()
         assertTrue(text.contains("RMP_VECTOR_UNSHARE"))
         assertTrue(text.contains("/data/adb/ksu/bin/busybox unshare"))
+        assertTrue(text.contains("/data/adb/magisk/busybox unshare"))
         assertTrue(text.contains("command unshare"))
+    }
+
+    @Test
+    fun `does not replay a second vector daemon during soft reboot`() {
+        val text = script()
+        assertTrue(text.contains("RMP_VECTOR_SINGLETON"))
+        assertTrue(text.contains("pidof vectord"))
+        assertTrue(text.contains("/data/adb/lspd/.vectord-start"))
+        assertTrue(text.contains("print \"if ! mkdir \\\"\$_VECTOR_START_LOCK\\\""))
+        assertTrue(text.contains("rmdir"))
+        assertTrue(text.contains("EXIT"))
     }
 
     @Test
@@ -68,6 +80,8 @@ class ModuleCompatScriptTest {
         assertTrue(text.contains(".rmp-orig"))
         assertTrue(text.contains("guarded RMP_ZYGISK_GUARD"))
         assertTrue(text.contains("guarded RMP_VECTOR_UNSHARE"))
+        assertTrue(text.contains("guarded RMP_VECTOR_SINGLETON"))
+        assertTrue(text.contains("\"\$script.rmp-orig\""))
     }
 
     @Test
