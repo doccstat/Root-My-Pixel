@@ -132,12 +132,14 @@ patch_vector() {
     cat > "$VECTOR_MOD/.rmp-unshare-prefix" <<'PREFIX'
 # toybox unshare rejects --propagation; use KernelSU or Magisk busybox.
 unshare() {
-    for _vector_busybox in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox; do
-        if [ -x "$_vector_busybox" ]; then
-            "$_vector_busybox" unshare "$@"
-            return $?
-        fi
-    done
+    if [ -x /data/adb/ksu/bin/busybox ]; then
+        /data/adb/ksu/bin/busybox unshare "$@"
+        return $?
+    fi
+    if [ -x /data/adb/magisk/busybox ]; then
+        /data/adb/magisk/busybox unshare "$@"
+        return $?
+    fi
     command unshare "$@"
 }
 PREFIX
