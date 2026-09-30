@@ -124,29 +124,63 @@ patch_vector() {
         echo "RMP_COMPAT_SKIP:vector-absent"
         return 0
     fi
-    if guarded RMP_VECTOR_UNSHARE "$script"; then
+    if guarded RMP_VECTOR_UNSHARE "$script" && guarded RMP_VECTOR_SINGLETON "$script"; then
         echo "RMP_COMPAT_OK:vector-already"
         return 0
     fi
     backup_once "$script"
     cat > "$VECTOR_MOD/.rmp-unshare-prefix" <<'PREFIX'
-# RMP_VECTOR_UNSHARE: toybox unshare rejects --propagation; use KernelSU busybox.
+# toybox unshare rejects --propagation; use KernelSU or Magisk busybox.
 unshare() {
-    if [ -x /data/adb/ksu/bin/busybox ]; then
-        /data/adb/ksu/bin/busybox unshare "$@"
-    else
-        command unshare "$@"
-    fi
+    for _vector_busybox in /data/adb/ksu/bin/busybox /data/adb/magisk/busybox; do
+        if [ -x "$_vector_busybox" ]; then
+            "$_vector_busybox" unshare "$@"
+            return $?
+        fi
+    done
+    command unshare "$@"
 }
 PREFIX
-    head -n 1 "$script.rmp-orig" > "$script.rmp-tmp"
-    cat "$VECTOR_MOD/.rmp-unshare-prefix" >> "$script.rmp-tmp"
-    tail -n +2 "$script.rmp-orig" >> "$script.rmp-tmp"
+    awk -v prefix="$VECTOR_MOD/.rmp-unshare-prefix" '
+        index($0, "/data/adb/ksu/bin/busybox") > 0 { has_unshare = 1 }
+        !done && index($0, "# Start the daemon directly") == 1 {
+            print "# RMP_VECTOR_UNSHARE: toybox unshare rejects --propagation; use a root-manager busybox."
+            if (!has_unshare) {
+                while ((getline line < prefix) > 0) print line
+                close(prefix)
+            }
+            print "# RMP_VECTOR_SINGLETON: do not replay an existing vectord."
+            print "if pidof vectord >/dev/null 2>&1; then"
+            print "    exit 0"
+            print "fi"
+            print "_VECTOR_START_LOCK=/data/adb/lspd/.vectord-start"
+            print "if ! mkdir \"$_VECTOR_START_LOCK\" 2>/dev/null; then"
+            print "    exit 0"
+            print "fi"
+            done = 1
+        }
+        index($0, "unshare --propagation slave -m") == 1 {
+            print "("
+            print "    trap '\''rmdir \"$_VECTOR_START_LOCK\" 2>/dev/null'\'' EXIT"
+            print "    if pidof vectord >/dev/null 2>&1; then"
+            print "        exit 0"
+            print "    fi"
+            print "    unshare --propagation slave -m \"$MODDIR/daemon\" --system-server-max-retry=3 \"$@\""
+            print ") &"
+            replaced = 1
+            next
+        }
+        { print }
+        END {
+            if (!done || !replaced) exit 2
+        }
+    ' "$script.rmp-orig" > "$script.rmp-tmp"
     rm -f "$VECTOR_MOD/.rmp-unshare-prefix"
-    if [ -s "$script.rmp-tmp" ] && guarded RMP_VECTOR_UNSHARE "$script.rmp-tmp"; then
+    if [ -s "$script.rmp-tmp" ] && guarded RMP_VECTOR_UNSHARE "$script.rmp-tmp" \
+        && guarded RMP_VECTOR_SINGLETON "$script.rmp-tmp"; then
         mv -f "$script.rmp-tmp" "$script"
         chmod 755 "$script"
-        echo "RMP_COMPAT_OK:vector-unshare"
+        echo "RMP_COMPAT_OK:vector-unshare-singleton"
     else
         rm -f "$script.rmp-tmp"
         echo "RMP_COMPAT_FAIL:vector-write"
