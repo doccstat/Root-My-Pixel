@@ -107,6 +107,26 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun refusesWhenAModuleUpdateIsStagedForTheNextBoot() {
+        // Applying a staged KernelSU update inside our framework restart is the
+        // overlap that hard-reset this device on 2026-09-30. The update must be
+        // left for a real boot, so the guard reads the staging dir and bails
+        // before anything is restarted.
+        val guard = script.indexOf(SoftReboot.MODULE_UPDATE_DIR)
+        val kill = script.indexOf("killall -9 system_server")
+        assertTrue("the guard must read the pending-update staging dir", guard >= 0)
+        assertTrue("the guard must run before the framework restart", guard in 0 until kill)
+        assertTrue(
+            "the refusal must print the marker the app surfaces",
+            script.contains(SoftReboot.REFUSED_MARKER),
+        )
+        assertTrue(
+            "a refused reboot must not start the framework restart",
+            script.indexOf(SoftReboot.REFUSED_MARKER) < kill,
+        )
+    }
+
+    @Test
     fun refusesToRunAgainTooSoon() {
         // Two soft reboots close together wedged the boot: the second one ran
         // while the framework was still settling from the first.

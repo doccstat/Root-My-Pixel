@@ -1407,6 +1407,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             applyNetworkFix(helper)
             installDurableStageFixes(helper)
             val result = SoftReboot.launch(app, helper, KSUD_PATH)
+            if (result.code == SoftReboot.REFUSED_EXIT_CODE) {
+                result.output.trim().lines().forEach { appendLog(it) }
+            }
             appendLog("[*] Soft reboot requested (exit ${result.code})")
         }
     }

@@ -44,6 +44,26 @@ object SoftReboot {
     /** Refuse a new soft reboot until this many seconds after the last start. */
     const val MIN_INTERVAL_SECONDS = 90L
 
+    /**
+     * KernelSU stages a freshly installed or updated module here and applies it
+     * in the `post-fs-data` stage of the next boot - including the emulated boot
+     * a soft reboot runs.
+     *
+     * Doing that inside our framework restart is what hard-reset this device on
+     * 2026-09-30: the module swap, the Zygisk re-injection and the restart all
+     * overlapped and the phone died with no panic, tombstone or reason recorded
+     * (the soft-reboot log and lock file were left with unflushed NUL tails).
+     * The update is applied by any boot, so the guard simply refuses to mix the
+     * two: reboot normally, or clear the staged update first.
+     */
+    const val MODULE_UPDATE_DIR = "/data/adb/modules_update"
+
+    /** Marker the script prints instead of restarting when the guard fires. */
+    const val REFUSED_MARKER = "RMP_SOFT_REBOOT_REFUSED:pending-module-update"
+
+    /** Exit code returned when the pending-update guard refuses the reboot. */
+    const val REFUSED_EXIT_CODE = 75
+
     fun launch(
         context: Context,
         helper: File?,
@@ -51,6 +71,12 @@ object SoftReboot {
         timeoutSeconds: Long = 10L,
     ): RootShell.Result {
         val log = File(context.filesDir, LOG_NAME)
+        val pending = pendingModuleUpdates(helper)
+        if (pending.isNotEmpty()) {
+            val refusal = refusalMessage(pending)
+            runCatching { log.appendText(refusal) }
+            return RootShell.Result(REFUSED_EXIT_CODE, refusal.trim())
+        }
         // Re-stage the platform repairs so this run uses the copy from the
         // installed app rather than one left on /data/adb by an older build:
         // an app update can add a repair (the ashmem boot-id node was one) and
@@ -62,6 +88,33 @@ object SoftReboot {
         val command =
             "setsid sh -c '${buildScript(ksudPath, compat)}' </dev/null >> '${log.absolutePath}' 2>&1 &"
         return RootShell.run(command, helper = helper, timeoutSeconds = timeoutSeconds)
+    }
+
+    /**
+     * KernelSU module updates staged for the next boot, in module order. An
+     * empty list means the soft reboot can proceed. Runs through the root shell
+     * so the app can report the refusal before anything is restarted.
+     */
+    fun pendingModuleUpdates(helper: File? = null): List<String> {
+        val command =
+            "if [ -d $MODULE_UPDATE_DIR ]; then ls -1 $MODULE_UPDATE_DIR 2>/dev/null; fi"
+        return RootShell.run(command, helper = helper, timeoutSeconds = 10L)
+            .output
+            .lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .sorted()
+            .toList()
+    }
+
+    /** Human-readable refusal, also appended to the soft-reboot log. */
+    private fun refusalMessage(pending: List<String>): String = buildString {
+        appendLine()
+        appendLine("[!] soft reboot refused: ${pending.size} KernelSU module update(s) staged")
+        appendLine("[!] a soft reboot applies that update inside the framework restart -")
+        appendLine("[!] the overlap that hard-reset this device on 2026-09-30.")
+        pending.forEach { appendLine("[!]   pending: $it") }
+        appendLine("[!] reboot normally to apply it, then re-run the exploit.")
     }
 
     internal fun buildScript(
@@ -81,6 +134,14 @@ object SoftReboot {
         "getprop persist.sys.boot.reason.history",
         "if [ \"\$(getprop sys.boot_completed)\" != \"1\" ]; then",
         "  echo \"[-] soft reboot: framework is not up, aborting\"",
+        "  exit 1",
+        "fi",
+        "if [ -n \"\$(ls -A $MODULE_UPDATE_DIR 2>/dev/null)\" ]; then",
+        "  echo \"[-] soft reboot: KernelSU module update staged for the next boot:\"",
+        "  ls -1 $MODULE_UPDATE_DIR 2>/dev/null | sed \"s|^|[-]   pending: |\"",
+        "  echo \"[-] soft reboot: REFUSED - applying it inside the framework restart hard-reset this device\"",
+        "  echo \"[-] soft reboot: reboot normally to apply it, then re-run the exploit\"",
+        "  echo $REFUSED_MARKER",
         "  exit 1",
         "fi",
         "now=\$(date +%s)",
