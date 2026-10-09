@@ -1003,9 +1003,10 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      *    userspace restart rotates that id every ashmem_create_region() fails
      *    with ENOENT and libhwui's Bitmap.asShared segfaults, fault 0x88), makes
      *    NeoZygisk's post-fs-data idempotent (its unconditional wipe unlinked a
-     *    live daemon's socket, after which no Zygisk module ever loaded), gives
-     *    Vector's `service.sh` an `unshare` that understands `--propagation`,
-     *    and re-asserts the `system_file` label on the Vector module tree so
+     *    live daemon's socket, after which no Zygisk module ever loaded), migrates
+     *    Vector's old `service.sh` to portable `unshare -m` plus an in-namespace
+     *    `mount --make-rslave /`, and re-asserts the `system_file` label on the
+     *    Vector module tree so
      *    the parasitic manager can be transferred into the shell host. The last
      *    one has to run on every start because a module reinstall or a
      *    `/data/adb` restore (both fresh inodes) resets the label to the

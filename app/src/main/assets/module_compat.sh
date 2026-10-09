@@ -112,81 +112,70 @@ GUARD
     fi
 }
 
-# --- Vector's service.sh cannot unshare on this device ----------------------
+# --- Vector's service/namespace lifecycle -----------------------------------
 #
-# `/system/bin/unshare` is toybox and rejects `--propagation`, so `vectord`
-# never starts; KernelSU's own busybox supports it. `unshare` is shadowed with
-# a shell function so a Vector update is re-patched on the next root without
-# rewriting the rest of the file.
+# Toybox unshare accepts `-m` but not the GNU-style `--propagation` option.
+# Establish rslave inside the namespace instead. VectorDaemon's FileSystem.tryLock()
+# is the singleton guarantee: unlike the old `.vectord-start` directory it is
+# released by the kernel on process death or reboot.
 patch_vector() {
     script="$VECTOR_MOD/service.sh"
     if [ ! -f "$script" ]; then
         echo "RMP_COMPAT_SKIP:vector-absent"
         return 0
     fi
-    if guarded RMP_VECTOR_UNSHARE "$script" && guarded RMP_VECTOR_SINGLETON "$script"; then
+    if guarded VECTOR_SERVICE_V2 "$script"; then
+        rmdir /data/adb/lspd/.vectord-start 2>/dev/null
         echo "RMP_COMPAT_OK:vector-already"
         return 0
     fi
-    backup_once "$script"
-    cat > "$VECTOR_MOD/.rmp-unshare-prefix" <<'PREFIX'
-# toybox unshare rejects --propagation; use KernelSU or Magisk busybox.
-unshare() {
-    if [ -x /data/adb/ksu/bin/busybox ]; then
-        /data/adb/ksu/bin/busybox unshare "$@"
-        return $?
+    if ! backup_once "$script"; then
+        echo "RMP_COMPAT_FAIL:vector-backup"
+        return 0
     fi
-    if [ -x /data/adb/magisk/busybox ]; then
-        /data/adb/magisk/busybox unshare "$@"
-        return $?
-    fi
-    command unshare "$@"
-}
-PREFIX
-    awk -v prefix="$VECTOR_MOD/.rmp-unshare-prefix" '
-        index($0, "/data/adb/ksu/bin/busybox") > 0 { has_unshare = 1 }
-        !done && index($0, "# Start the daemon directly") == 1 {
-            print "# RMP_VECTOR_UNSHARE: toybox unshare rejects --propagation; use a root-manager busybox."
-            if (!has_unshare) {
-                while ((getline line < prefix) > 0) print line
-                close(prefix)
+    # Transform the CURRENT script, never a possibly stale backup from an older module version.
+    # Recognize only the historical guard and launcher; preserve all other lines and arguments.
+    if awk '
+        NR == 1 {
+            if ($0 ~ /^#!/) {
+                print
+                print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
+                next
             }
-            print "# RMP_VECTOR_SINGLETON: do not replay an existing vectord."
-            print "if pidof vectord >/dev/null 2>&1; then"
-            print "    exit 0"
-            print "fi"
-            print "_VECTOR_START_LOCK=/data/adb/lspd/.vectord-start"
-            print "if ! mkdir \"$_VECTOR_START_LOCK\" 2>/dev/null; then"
-            print "    exit 0"
-            print "fi"
-            done = 1
+            print "#!/system/bin/sh"
+            print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
         }
-        index($0, "unshare --propagation slave -m") == 1 {
-            print "("
-            print "    trap '\''rmdir \"$_VECTOR_START_LOCK\" 2>/dev/null'\'' EXIT"
-            print "    if pidof vectord >/dev/null 2>&1; then"
-            print "        exit 0"
-            print "    fi"
-            print "    unshare --propagation slave -m \"$MODDIR/daemon\" --system-server-max-retry=3 \"$@\""
-            print ") &"
-            replaced = 1
-            next
+        {
+            line = $0
+            sub(/^[ \t]+/, "", line)
+            if (line == "_VECTOR_START_LOCK=/data/adb/lspd/.vectord-start") next
+            if (line == "if ! mkdir \"$_VECTOR_START_LOCK\" 2>/dev/null; then") {
+                if (getline <= 0) { failed = 1; exit 2 }
+                sub(/^[ \t]+/, "")
+                if ($0 != "exit 0") { failed = 1; exit 2 }
+                if (getline <= 0) { failed = 1; exit 2 }
+                sub(/^[ \t]+/, "")
+                if ($0 != "fi") { failed = 1; exit 2 }
+                next
+            }
+            if (line == "trap '\''rmdir \"$_VECTOR_START_LOCK\" 2>/dev/null'\'' EXIT") next
+            if (line ~ /^unshare --propagation slave -m /) {
+                sub(/unshare --propagation slave -m /,
+                    "unshare -m sh -c '\''mount --make-rslave / \\&\\& exec \"$@\"'\'' vector-namespace ")
+                replaced++
+            }
+            print
         }
-        { print }
-        END {
-            if (!done || !replaced) exit 2
-        }
-    ' "$script.rmp-orig" > "$script.rmp-tmp"
-    rm -f "$VECTOR_MOD/.rmp-unshare-prefix"
-    if [ -s "$script.rmp-tmp" ] && guarded RMP_VECTOR_UNSHARE "$script.rmp-tmp" \
-        && guarded RMP_VECTOR_SINGLETON "$script.rmp-tmp"; then
-        mv -f "$script.rmp-tmp" "$script"
-        chmod 755 "$script"
-        echo "RMP_COMPAT_OK:vector-unshare-singleton"
-    else
-        rm -f "$script.rmp-tmp"
-        echo "RMP_COMPAT_FAIL:vector-write"
+        END { if (failed || replaced != 1) exit 2 }
+    ' "$script" > "$script.rmp-tmp" && sh -n "$script.rmp-tmp"; then
+        if chmod 755 "$script.rmp-tmp" && mv -f "$script.rmp-tmp" "$script"; then
+            rmdir /data/adb/lspd/.vectord-start 2>/dev/null
+            echo "RMP_COMPAT_OK:vector-service"
+            return 0
+        fi
     fi
+    rm -f "$script.rmp-tmp"
+    echo "RMP_COMPAT_FAIL:vector-service-pattern"
 }
 
 # --- Vector's manager.apk must stay readable by the shell host --------------
