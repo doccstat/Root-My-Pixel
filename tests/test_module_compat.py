@@ -113,6 +113,43 @@ class VectorMigrationTest(unittest.TestCase):
         self.assertEqual(self.script.read_text(), original)
         self.assertTrue(self.stale_lock.exists())
 
+    def test_stale_directory_blocks_legacy_but_not_migrated_launcher(self):
+        self.script.write_text(self.relocate(LEGACY))
+        tools = self.root / "bin"
+        tools.mkdir()
+        trace = self.root / "launch"
+        for path, body in (
+            (tools / "pidof", "exit 1"),
+            (tools / "unshare", '[ "$1" = -m ] || exit 91; shift; exec "$@"'),
+            (tools / "mount", '[ "$1" = --make-rslave ]'),
+            (self.module / "daemon", 'printf "<%s>\\n" "$@" >> "$TRACE"'),
+        ):
+            path.write_text("#!/bin/sh\n" + body + "\n")
+            path.chmod(0o755)
+        env = dict(os.environ, PATH=f"{tools}:/usr/bin:/bin", TRACE=str(trace))
+
+        def launch():
+            return subprocess.run(
+                ["sh", str(self.script), "argument with spaces"],
+                env=env, capture_output=True, text=True, timeout=5,
+            )
+
+        # Reproduce the silent success observed with no daemon and an old mkdir lock.
+        self.assertEqual(launch().returncode, 0)
+        self.assertFalse(trace.exists())
+        self.assertIn("RMP_COMPAT_OK:vector-service", self.migrate())
+        # Leftover/restored directories must be irrelevant, not just cleaned once.
+        self.stale_lock.mkdir()
+        self.assertEqual(launch().returncode, 0)
+        self.assertEqual(trace.read_text(), "<--system-server-max-retry=3>\n<argument with spaces>\n")
+
+    def test_modern_launcher_is_not_rebuilt_from_a_legacy_backup(self):
+        modern = '#!/system/bin/sh\n# VECTOR_SERVICE_V2\necho newer-launcher\n'
+        self.script.write_text(modern)
+        self.backup.write_text(self.relocate(LEGACY))
+        self.assertIn("RMP_COMPAT_OK:vector-already", self.migrate())
+        self.assertEqual(self.script.read_text(), modern)
+
     def test_absent_module_is_a_noop(self):
         self.assertIn("RMP_COMPAT_SKIP:vector-absent", self.migrate())
         self.assertFalse(self.backup.exists())

@@ -28,6 +28,9 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Check legacy module migrations
+        run: python3 -m unittest discover -s tests -v
+
       - name: Fetch the latest GhostLock ksud from the KernelSU fork
         env:
           KSU_RELEASE_BASE: https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
