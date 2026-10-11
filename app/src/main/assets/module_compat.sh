@@ -115,16 +115,23 @@ GUARD
 # --- Vector's service/namespace lifecycle -----------------------------------
 #
 # Toybox unshare accepts `-m` but not the GNU-style `--propagation` option.
-# Establish rslave inside the namespace instead. VectorDaemon's FileSystem.tryLock()
-# is the singleton guarantee: unlike the old `.vectord-start` directory it is
-# released by the kernel on process death or reboot.
+# Establish rslave with Android's mount, explicitly specifying source and type:
+# --make-rslave looks up fstab in Toybox, while `-o rslave / /` auto-binds root.
+# The kernel ignores source/type for this propagation-only operation. This is
+# also fixed in Vector itself; this migration is only for old installed scripts.
+# FileSystem.tryLock() remains the singleton guarantee, not a directory guard.
 patch_vector() {
     script="$VECTOR_MOD/service.sh"
     if [ ! -f "$script" ]; then
         echo "RMP_COMPAT_SKIP:vector-absent"
         return 0
     fi
-    if guarded VECTOR_SERVICE_V2 "$script"; then
+    modern=0
+    guarded VECTOR_SERVICE_V2 "$script" && modern=1
+    # V2 owns the correct lock lifecycle, but its first version still used
+    # BusyBox-only mount syntax after execing Android's shell. Migrate that
+    # exact invocation without rebuilding the launcher from an old backup.
+    if [ "$modern" = 1 ] && ! grep -Fq 'mount --make-rslave / && exec "$@"' "$script"; then
         rmdir /data/adb/lspd/.vectord-start 2>/dev/null
         echo "RMP_COMPAT_OK:vector-already"
         return 0
@@ -135,15 +142,15 @@ patch_vector() {
     fi
     # Transform the CURRENT script, never a possibly stale backup from an older module version.
     # Recognize only the historical guard and launcher; preserve all other lines and arguments.
-    if awk '
+    if awk -v modern="$modern" '
         NR == 1 {
             if ($0 ~ /^#!/) {
                 print
-                print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
+                if (!modern) print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
                 next
             }
             print "#!/system/bin/sh"
-            print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
+            if (!modern) print "# VECTOR_SERVICE_V2: singleton owned by FileSystem.tryLock()."
         }
         {
             line = $0
@@ -161,7 +168,11 @@ patch_vector() {
             if (line == "trap '\''rmdir \"$_VECTOR_START_LOCK\" 2>/dev/null'\'' EXIT") next
             if (line ~ /^unshare --propagation slave -m /) {
                 sub(/unshare --propagation slave -m /,
-                    "unshare -m sh -c '\''mount --make-rslave / \\&\\& exec \"$@\"'\'' vector-namespace ")
+                    "unshare -m sh -c '\''/system/bin/mount -t rootfs -o rslave rootfs / \\&\\& exec \"$@\"'\'' vector-namespace ")
+                replaced++
+            } else if (modern && index(line,
+                "unshare -m sh -c '\''mount --make-rslave / && exec \"$@\"'\'' vector-namespace ") == 1) {
+                sub(/mount --make-rslave \//, "/system/bin/mount -t rootfs -o rslave rootfs /")
                 replaced++
             }
             print
