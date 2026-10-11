@@ -1005,7 +1005,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
      *    NeoZygisk's post-fs-data idempotent (its unconditional wipe unlinked a
      *    live daemon's socket, after which no Zygisk module ever loaded), migrates
      *    Vector's old `service.sh` to portable `unshare -m` plus an in-namespace
-     *    `mount --make-rslave /`, and re-asserts the `system_file` label on the
+     *    `/system/bin/mount -t rootfs -o rslave rootfs /`, and re-asserts the `system_file` label on the
      *    Vector module tree so
      *    the parasitic manager can be transferred into the shell host. The last
      *    one has to run on every start because a module reinstall or a

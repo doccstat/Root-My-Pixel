@@ -13,6 +13,17 @@ MODDIR="${0%/*}"
 cd "$MODDIR" || exit 1
 unshare --propagation slave -m "$MODDIR/daemon" --system-server-max-retry=3 "$@" &
 '''
+V2 = '''#!/system/bin/sh
+# VECTOR_SERVICE_V2: daemon lock, but old mount syntax
+MODDIR="${0%/*}"
+cd "$MODDIR" || exit 1
+MODDIR="$PWD"
+(
+    unshare -m sh -c 'mount --make-rslave / && exec "$@"' vector-namespace "$MODDIR/daemon" --system-server-max-retry=3 "$@"
+    status=$?
+    [ "$status" = 0 ] || echo "Daemon launch failed (exit $status)" >&2
+) </dev/null &
+'''
 LEGACY = '''#!/system/bin/sh
 MODDIR="${0%/*}"
 cd "$MODDIR" || exit 1
@@ -71,12 +82,31 @@ class VectorMigrationTest(unittest.TestCase):
         self.assertIn("RMP_COMPAT_OK:vector-service", self.migrate())
         text = self.script.read_text()
         self.assertTrue(text.startswith("#!/system/bin/sh\n# VECTOR_SERVICE_V2"))
-        self.assertIn("unshare -m sh -c 'mount --make-rslave / && exec \"$@\"'", text)
+        self.assertIn("unshare -m sh -c '/system/bin/mount -t rootfs -o rslave rootfs / && exec \"$@\"'", text)
         self.assertIn('"$MODDIR/daemon" --system-server-max-retry=3 "$@" &', text)
         self.assertTrue(text.endswith("# keep custom suffix\n"))
         self.assertTrue(os.access(self.script, os.X_OK))
         self.assertFalse(self.stale_lock.exists())
         subprocess.run(["sh", "-n", str(self.script)], check=True)
+
+    def test_v2_mount_is_migrated_without_reverting_diagnostics_or_arguments(self):
+        self.script.write_text(V2 + "# keep custom suffix\n")
+        self.backup.write_text(self.relocate(LEGACY))
+        self.assertIn("RMP_COMPAT_OK:vector-service", self.migrate())
+        expected = (V2 + "# keep custom suffix\n").replace(
+            "mount --make-rslave /", "/system/bin/mount -t rootfs -o rslave rootfs /"
+        )
+        self.assertEqual(self.script.read_text(), expected)
+        self.assertEqual(self.backup.read_text(), self.relocate(LEGACY))
+        self.assertIn("RMP_COMPAT_OK:vector-already", self.migrate())
+        self.assertEqual(self.script.read_text(), expected)
+        subprocess.run(["sh", "-n", str(self.script)], check=True)
+
+    def test_ambiguous_v2_mount_is_not_rewritten(self):
+        original = V2 + V2
+        self.script.write_text(original)
+        self.assertIn("RMP_COMPAT_FAIL:vector-service-pattern", self.migrate())
+        self.assertEqual(self.script.read_text(), original)
 
     def test_legacy_guard_removed_and_second_run_is_idempotent(self):
         original = self.relocate(LEGACY)
@@ -121,7 +151,7 @@ class VectorMigrationTest(unittest.TestCase):
         for path, body in (
             (tools / "pidof", "exit 1"),
             (tools / "unshare", '[ "$1" = -m ] || exit 91; shift; exec "$@"'),
-            (tools / "mount", '[ "$1" = --make-rslave ]'),
+            (tools / "mount", '[ "$*" = "-t rootfs -o rslave rootfs /" ]'),
             (self.module / "daemon", 'printf "<%s>\\n" "$@" >> "$TRACE"'),
         ):
             path.write_text("#!/bin/sh\n" + body + "\n")
@@ -129,8 +159,13 @@ class VectorMigrationTest(unittest.TestCase):
         env = dict(os.environ, PATH=f"{tools}:/usr/bin:/bin", TRACE=str(trace))
 
         def launch():
+            # Relocate only Android's absolute mount path for host execution.
+            launcher = self.module / "host-service.sh"
+            launcher.write_text(self.script.read_text().replace(
+                "/system/bin/mount", '"' + str(tools / "mount") + '"'
+            ))
             return subprocess.run(
-                ["sh", str(self.script), "argument with spaces"],
+                ["sh", str(launcher), "argument with spaces"],
                 env=env, capture_output=True, text=True, timeout=5,
             )
 

@@ -46,7 +46,7 @@ class ModuleCompatScriptTest {
         val text = script()
         assertTrue(text.contains("VECTOR_SERVICE_V2"))
         assertTrue(text.contains("unshare -m sh -c"))
-        assertTrue(text.contains("mount --make-rslave /"))
+        assertTrue(text.contains("/system/bin/mount -t rootfs -o rslave rootfs /"))
     }
 
     @Test
@@ -56,7 +56,7 @@ class ModuleCompatScriptTest {
         assertTrue(text.contains("FileSystem.tryLock"))
         assertTrue(text.contains("replaced != 1"))
         assertTrue(text.contains("unshare -m"))
-        assertTrue(text.contains("mount --make-rslave /"))
+        assertTrue(text.contains("/system/bin/mount -t rootfs -o rslave rootfs /"))
         assertTrue(text.contains("/data/adb/lspd/.vectord-start"))
     }
 
