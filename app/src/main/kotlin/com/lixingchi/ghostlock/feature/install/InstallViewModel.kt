@@ -630,9 +630,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
 
         // 10. Run the post-fs-data stage (module post-fs-data, feature config,
         // sepolicy rules, metamodule mount). The service stage is deliberately
-        // left to the emulated soft reboot: Vector's `vectord` must claim the
-        // `serial` service before system_server registers its own, and that
-        // window only exists inside `ksud soft-reboot`'s stop/start.
+        // left to SoftReboot's guarded framework-only restart, which preserves
+        // SurfaceFlinger and the composer. Do not restore blanket stop/start
+        // for Vector: daemon/bridge readiness must be validated separately.
         triggerPostFsData(helper, ksudDest)
 
         appendLog(app.getString(R.string.log_ksu_control_verified))
@@ -1387,19 +1387,11 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Emulated soft reboot - the same userspace restart the KernelSU manager
-     * and the GhostLock flow use on the Galaxy reference device.
-     *
-     * This is deliberately `ksud soft-reboot` and not a bare `killall
-     * system_server`: the emulation stops and starts the init services and runs
-     * the post-fs-data and service stages itself, which is the only moment a
-     * Zygisk module's `service.sh` runs while `system_server` is still down.
-     * Vector's `vectord` needs exactly that window to claim the `serial`
-     * service before the framework registers its own. A bare `system_server`
-     * kill never ran `service.sh`, so Vector stayed enabled but never loaded.
-     *
-     * The repairs are re-applied first (and rewritten to disk) so the restart
-     * can never land in the broken-netd window.
+     * Apply the platform repairs, then use [SoftReboot]'s guarded framework-only
+     * restart and explicit KernelSU stages. SurfaceFlinger and the composer
+     * remain running; do not delegate to an unverified `ksud soft-reboot` or
+     * restore init's blanket stop/start to create a Vector startup window.
+     * Vector daemon/bridge activation remains a separate validation gate.
      */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {

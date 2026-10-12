@@ -8,10 +8,12 @@ import java.io.File
  * late-loaded root: module changes, Zygisk injection and Xposed hooks all take
  * effect, and the display comes back lit.
  *
- * The restart is deliberately narrow. `ksud soft-reboot` (and the KernelSU
- * manager's button) runs init's blanket `stop`/`start`, which tears the whole
- * display stack down and leaves the cover panel of this foldable in a stale
- * DPMS/PSR state - the three-dot cover artifact. Clearing that afterwards is
+ * The restart is deliberately narrow. Stock `ksud soft-reboot` runs init's
+ * blanket `stop`/`start`, which tears the whole display stack down. Our KernelSU
+ * fork also uses a framework-only restart, but this app owns its sequence and
+ * guards rather than assuming which binary a manager button will execute.
+ * Tearing down the display stack leaves the cover panel in a stale DPMS/PSR
+ * state - the three-dot cover artifact. Clearing that afterwards is
  * not an option: a composer HAL restart escalates to a RescueParty/recovery
  * boot, and unbinding the panel driver panics the kernel. So the panel is never
  * staled in the first place.

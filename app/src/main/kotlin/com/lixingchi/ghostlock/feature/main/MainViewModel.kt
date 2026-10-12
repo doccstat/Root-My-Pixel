@@ -291,8 +291,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Re-init the display stack and then run the emulated KernelSU soft reboot;
-     * see [SoftReboot] for why both steps are needed and why this order.
+     * Restart only the framework and replay KernelSU stages through [SoftReboot].
+     * Keep the display stack running and retain its pending-update/repeat guards.
      */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
