@@ -72,6 +72,21 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun neverDelegatesTheRestartToKsud() {
+        // The forked ksud is narrow too, but a stock/fallback binary may tear
+        // down the display stack. The app must own its guarded restart and
+        // invoke only the explicit stages, with or without platform repairs.
+        val directRestart = Regex("${Regex.escape(ksud)}[\"']?\\s+soft-reboot\\b")
+        val withRepairs = SoftReboot.buildScript(compatScript = "/data/user/0/x/files/scripts/module_compat.sh")
+        for (candidate in listOf(script, withRepairs)) {
+            assertTrue(
+                "must not delegate display lifecycle to the installed ksud",
+                !directRestart.containsMatchIn(candidate),
+            )
+        }
+    }
+
+    @Test
     fun runsTheKsudModuleStagesInBootOrder() {
         val post = script.indexOf("$ksud\" post-fs-data")
         val services = script.indexOf("$ksud\" services")
