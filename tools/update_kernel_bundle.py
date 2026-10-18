@@ -32,7 +32,11 @@ def update_bundle(apk, metadata, assets, apksigner, aapt2):
     }
     for key, value in expected.items():
         if info.get(key) != value:
-            raise ValueError(f"KernelSU bundle metadata mismatch: {key}")
+            raise ValueError(
+                f"KernelSU bundle metadata mismatch: {key}. "
+                "A successful KernelSU Build Manager publication is required before rebuilding RMP; "
+                "a standalone ksud release is not the matched bundle."
+            )
     if not re.fullmatch(r"[0-9a-f]{40}", info.get("sourceCommit", "")):
         raise ValueError("KernelSU bundle has no immutable source commit")
 

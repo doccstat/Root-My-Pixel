@@ -83,6 +83,13 @@ class KernelBundleTest(unittest.TestCase):
                 self.assert_unchanged()
                 self.info[key] = saved
 
+    def test_old_publication_explains_the_manager_dependency(self):
+        del self.info["upstreamCommit"]
+        self.write_metadata()
+        with self.assertRaisesRegex(ValueError, "successful KernelSU Build Manager publication"):
+            self.run_update()
+        self.assert_unchanged()
+
     def test_wrong_signer_or_package_is_rejected(self):
         original = self.certs
         self.certs = "Signer #1 certificate SHA-256 digest: " + "0" * 64
@@ -115,6 +122,8 @@ class KernelBundleTest(unittest.TestCase):
         self.assertNotIn('$KSU_RELEASE_BASE/ksud"', workflow)
         self.assertNotIn("keeping the committed", workflow)
         self.assertIn("tools/update_kernel_bundle.py", workflow)
+        self.assertIn("types: [ghostlock-manager-published]", workflow)
+        self.assertNotIn("ghostlock-ksud-published", workflow)
         manager = (ROOT / "app/src/main/kotlin/com/lixingchi/ghostlock/utils/BundledManager.kt").read_text()
         self.assertLess(manager.index("driverMatchesBundle("), manager.index("val staged = stage("))
         self.assertIn("pm install --user 0 -r", manager)
