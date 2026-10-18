@@ -16,7 +16,7 @@ object BundledManager {
     /**
      * The GhostLock manager package - our KernelSU fork builds the manager
      * under this name so the driver trusts it (see `kernel/Kbuild` in the fork,
-     * which pins `KSU_MANAGER_PACKAGE` and our signer certificate).
+     * which pins `KSU_PACKAGE_NAME` and our signer certificate).
      */
     const val PACKAGE = "com.lixingchi.kernelsu"
 
@@ -80,18 +80,23 @@ object BundledManager {
             log("[+] KernelSU Manager $installed already installed")
             return true
         }
+        val driver = RootShell.run("/data/adb/ksud debug info", helper = helper)
+        if (!driver.isOk || !KernelSuInstallChecks.driverMatchesBundle(driver.output, target)) {
+            log("[!] Manager left unchanged: the running driver does not match this bundle. " +
+                "Use a full reboot and root again with this RMP build to update KernelSU; " +
+                "a soft reboot keeps the old driver.")
+            return false
+        }
         log(
             "[*] Installing bundled KernelSU Manager ${target ?: "(unreadable version)"} " +
                 "(device has ${installed ?: "none"})...",
         )
         val staged = stage(context, helper, log) ?: return false
-        var result = RootShell.run("pm install -r $staged", helper = helper)
+        val result = RootShell.run("pm install --user 0 -r $staged", helper = helper)
         if (!result.isOk &&
             SIGNATURE_MISMATCH_MARKERS.any { result.output.contains(it, ignoreCase = true) }
         ) {
-            log("[!] Installed manager has a different signature; replacing it")
-            RootShell.run("pm uninstall $PACKAGE", helper = helper)
-            result = RootShell.run("pm install -r $staged", helper = helper)
+            log("[!] Installed manager has a different signature; not uninstalling it or deleting its data")
         }
         RootShell.run("rm -f $staged", helper = helper)
         val now = installedVersionCode(context)
