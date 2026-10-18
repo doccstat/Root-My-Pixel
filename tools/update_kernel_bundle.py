@@ -44,7 +44,8 @@ def update_bundle(apk, metadata, assets, apksigner, aapt2):
         [str(apksigner), "verify", "--print-certs", str(apk)],
         check=True, capture_output=True, text=True,
     ).stdout
-    signers = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$", certs, re.M)
+    # SDK 37 uses scheme labels ("V2 Signer:"); collect every certificate digest.
+    signers = re.findall(r"^.* certificate SHA-256 digest: (.*)$", certs, re.M)
     if signers != [SIGNER]:
         raise ValueError("KernelSU APK signer does not match the driver")
     badging = subprocess.run(
