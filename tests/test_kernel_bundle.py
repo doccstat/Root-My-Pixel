@@ -34,7 +34,8 @@ class KernelBundleTest(unittest.TestCase):
         self.daemon[:6] = b"\x7fELF\x02\x01"
         struct.pack_into("<HH", self.daemon, 16, 3, 183)
         self.write_apk()
-        self.certs = f"Signer #1 certificate SHA-256 digest: {bundle.SIGNER}\n"
+        # Captured with build-tools 37.0.0 against the published version 32711 APK.
+        self.certs = (ROOT / "tests/fixtures/apksigner-37.txt").read_text()
         self.badging = f"package: name='{bundle.PACKAGE}' versionCode='32700' versionName='test'\n"
 
     def write_apk(self, member=bundle.DAEMON):
@@ -69,6 +70,29 @@ class KernelBundleTest(unittest.TestCase):
         self.assertEqual(self.ksud.read_bytes(), self.daemon)
         self.assertEqual(self.ksud.stat().st_mode & 0o777, 0o755)
         self.assertEqual(self.manager.stat().st_mode & 0o777, 0o644)
+
+    def test_legacy_certificate_output_is_also_accepted(self):
+        self.certs = f"Signer #1 certificate SHA-256 digest: {bundle.SIGNER}\n"
+        self.run_update()
+        self.assertEqual(self.manager.read_bytes(), self.apk.read_bytes())
+        self.assertEqual(self.ksud.read_bytes(), self.daemon)
+
+    def test_missing_malformed_or_extra_certificate_is_rejected(self):
+        original = self.certs
+        for output in (
+            "Verifies\n",
+            original.replace(bundle.SIGNER, "0" * 64),
+            original.replace(bundle.SIGNER, "not-a-digest"),
+            original.replace(bundle.SIGNER, ""),
+            original + f"Signer #2 certificate SHA-256 digest: {bundle.SIGNER}\n",
+            original + "V3 Signer: certificate SHA-256 digest: " + "0" * 64 + "\n",
+            original + "V3 Signer: certificate SHA-256 digest: invalid\n",
+        ):
+            with self.subTest(output=output):
+                self.certs = output
+                with self.assertRaisesRegex(ValueError, "signer does not match"):
+                    self.run_update()
+                self.assert_unchanged()
 
     def test_stale_or_mixed_metadata_never_replaces_either_asset(self):
         for key, invalid in (("upstreamCommit", "0" * 40), ("uapiVersion", 4),
