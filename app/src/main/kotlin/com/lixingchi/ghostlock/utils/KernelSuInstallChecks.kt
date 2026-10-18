@@ -15,6 +15,12 @@ internal object KernelSuInstallChecks {
     fun debugInfoShowsActiveKernelSu(output: String): Boolean =
         versionLine.containsMatchIn(output)
 
+    // Do not repair a manager with a newer bundle over a still-loaded older driver.
+    fun driverMatchesBundle(output: String, managerVersion: Long?): Boolean =
+        managerVersion != null &&
+            versionLine.find(output)?.groupValues?.get(1)?.toLongOrNull() == managerVersion &&
+            Regex("(?m)^uapi_version:\\s*6\\s*$").containsMatchIn(output)
+
     /**
      * The `ksud insmod` invocation that loads the KMI-matched module.
      *

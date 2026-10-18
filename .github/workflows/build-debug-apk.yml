@@ -31,54 +31,6 @@ jobs:
       - name: Check legacy module migrations
         run: python3 -m unittest discover -s tests -v
 
-      - name: Fetch the latest GhostLock ksud from the KernelSU fork
-        env:
-          KSU_RELEASE_BASE: https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
-        run: |
-          set -euo pipefail
-          tmp="$(mktemp -d)"
-          # Verify the published checksum and that it is an aarch64 Android ELF
-          # before replacing the committed asset. Fall back to the committed
-          # ksud when the release is missing or unverifiable.
-          if curl -fsSL -o "$tmp/ksud" "$KSU_RELEASE_BASE/ksud" &&
-             curl -fsSL -o "$tmp/ksud.sha256" "$KSU_RELEASE_BASE/ksud.sha256" &&
-             (cd "$tmp" && sha256sum -c --quiet ksud.sha256) &&
-             file "$tmp/ksud" | grep -q 'ARM aarch64'; then
-            install -m 0755 "$tmp/ksud" app/src/main/assets/ksud/ksud
-            echo "Using ksud from the KernelSU fork release:"
-            sha256sum app/src/main/assets/ksud/ksud
-          else
-            echo "::warning::Could not fetch a verified ksud release asset; keeping the committed asset."
-          fi
-          rm -rf "$tmp"
-
-      - name: Fetch the latest GhostLock manager from the KernelSU fork
-        env:
-          KSU_RELEASE_BASE: https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
-          MANAGER_PACKAGE: com.lixingchi.kernelsu
-        run: |
-          set -euo pipefail
-          tmp="$(mktemp -d)"
-          # The manager must be the signed build the fork's driver pins
-          # (com.lixingchi.kernelsu + our signer). Verify checksum, that the
-          # published metadata names that package, and that it is an APK
-          # before replacing the committed asset; otherwise keep the committed
-          # copy so the build never ships a mismatched manager.
-          if curl -fsSL -o "$tmp/GhostLock-manager.apk" "$KSU_RELEASE_BASE/GhostLock-manager.apk" &&
-             curl -fsSL -o "$tmp/GhostLock-manager.apk.sha256" "$KSU_RELEASE_BASE/GhostLock-manager.apk.sha256" &&
-             curl -fsSL -o "$tmp/manager.json" "$KSU_RELEASE_BASE/manager.json" &&
-             (cd "$tmp" && sha256sum -c --quiet GhostLock-manager.apk.sha256) &&
-             python3 -c "import json,sys; d=json.load(open('$tmp/manager.json')); sys.exit(0 if d.get('package')=='$MANAGER_PACKAGE' else 1)" &&
-             file "$tmp/GhostLock-manager.apk" | grep -qiE 'android package|zip archive'; then
-            install -m 0644 "$tmp/GhostLock-manager.apk" app/src/main/assets/manager/GhostLock-manager.apk
-            echo "Using manager from the KernelSU fork release:"
-            sha256sum app/src/main/assets/manager/GhostLock-manager.apk
-            cat "$tmp/manager.json"
-          else
-            echo "::warning::Could not fetch a verified manager release asset; keeping the committed manager."
-          fi
-          rm -rf "$tmp"
-
       - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
@@ -100,9 +52,24 @@ jobs:
           # exist, and `api-level`/`cache` are not inputs of this action. (The
           # old v3 failure was its default `tools platform-tools`: `tools` no
           # longer exists in the SDK repo and `sdkmanager tools` exited 1.)
-          packages: 'platform-tools platforms;android-37.0'
+          packages: 'platform-tools platforms;android-37.0 build-tools;37.0.0'
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
+
+      - name: Fetch the matched KernelSU manager and embedded ksud
+        env:
+          KSU_RELEASE_BASE: https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl -fsSL -o "$tmp/GhostLock-manager.apk" "$KSU_RELEASE_BASE/GhostLock-manager.apk"
+          curl -fsSL -o "$tmp/manager.json" "$KSU_RELEASE_BASE/manager.json"
+          # Fail the build on stale/mixed publication, not back to old committed binaries.
+          python3 tools/update_kernel_bundle.py \
+            --apk "$tmp/GhostLock-manager.apk" --metadata "$tmp/manager.json" \
+            --apksigner "$ANDROID_HOME/build-tools/37.0.0/apksigner" \
+            --aapt2 "$ANDROID_HOME/build-tools/37.0.0/aapt2"
 
       - name: Install NDK required by AGP 9.3.1
         # AGP 9.3.1 uses NDK 28.2.13676358 as default android.ndkVersion.

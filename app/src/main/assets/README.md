@@ -1,67 +1,62 @@
-# App Assets
+# App assets
 
-This directory contains bundled payload files shipped inside the APK.
+## Device payloads
 
-## Required files
+`profiles.json` maps supported firmware to `exploits/*.so` and its kernel KMI.
+Yogi `CD1A.260618.001.C3` uses `android16-6.12`; Android 17 userspace does not
+change that KMI. The upstream exploit payloads and profile feed are unchanged.
 
-### profiles.json
-The device profile feed. Maps each supported Pixel firmware to its asset paths.
+## Matched KernelSU bundle
 
-### explores/*.so
-Pre-compiled exploit payloads (CVE-2026-43499 APP_PAYLOAD variant) for each
-target. Built from the payloads/ directory with:
-```
-make TARGET=frankel-CP2A.260605.012 ANDROID_NDK_HOME=...
-```
+- `manager/GhostLock-manager.apk`: visible **KernelSU**, package
+  `com.lixingchi.kernelsu`. The legacy filename is a stable download contract.
+- `ksud/ksud`: extracted from that APK's `lib/arm64-v8a/libksud.so`, including
+  its matching KernelSU LKMs. RMP extracts the selected KMI's `.ko` and uses
+  `ksud insmod ... allow_shell=1`; it does not patch a boot partition.
 
-The output `cve-2026-43499-app.release.so` goes into `app/src/main/assets/exploits/<target>.so`.
-
-### ksud/ksud
-The KernelSU late-load binary, downloaded from official KernelSU releases.
-Pinned to upstream `tiann/KernelSU` v3.3.0 (`ksud-aarch64-linux-android`,
-sha256 `8614de6cdc2233c71fd0d1c64381ea10fbe6658651bae9b5a8dab4fe08e6344b`).
-
-One binary covers every KMI. It embeds a `kernelsu.ko` per KMI (`android12-5.10`
-through `android16-6.12`) and selects between them from the `--kmi` it is passed
-at late-load, which is what a profile's `kmi` field supplies. This used to be
-shipped as one file per KMI; those copies were byte-identical, so they were
-merged into this one.
-
-### manager/GhostLock-manager.apk
-The GhostLock manager (`com.lixingchi.kernelsu`), built from our KernelSU fork
-(`depot/third-party/github/doccstat/KernelSU`) for the same release as
-`ksud/ksud`. The manager must match the late-loaded `kernelsu.ko`: the driver
-pins the manager's package name *and* its signing certificate, and the manager
-and `ksud` speak the same versioned UAPI, so a separately installed (possibly
-older or fork) manager can diverge.
-
-The file name is **stable and version-less on purpose**: `build-debug-apk.yml`
-replaces this asset in place with whatever the fork last published to its
-`ghostlock-latest` release (`GhostLock-manager.apk` + `manager.json`), and
-`BundledManager` reads the expected `versionCode` from the APK itself via
-`PackageManager.getPackageArchiveInfo` rather than a hardcoded constant. So a
-CI-refreshed manager needs no source change in this repo.
-
-sha256 `9b53179e06f3d2a9a0a500cd55a597895e43f345b9e83b6067bea982750c89ae`.
-Signer certificate SHA-256 is
+The source integration is upstream
+`96770dfb807fea61e06819e4cbb438384df54b63` / UAPI **6**, with the fork's signer,
+package and framework-only restart preserved. Driver `KSU_PACKAGE_NAME` is
+`com.lixingchi.kernelsu`, `KSU_EXPECTED_SIZE=0x034b`, and `KSU_EXPECTED_HASH` is
 `ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050` (DER size
-`0x34b`), and the LKM is rebuilt for KMI `android16-6.12` with
-`KSU_MANAGER_PACKAGE=com.lixingchi.kernelsu`, `KSU_EXPECTED_SIZE=0x034b` and
-`KSU_EXPECTED_HASH` set to that same hash - the fork's `kernel/Kbuild` defaults -
-so the driver trusts this manager with no runtime registration.
+`0x34b`). The signing key is never bundled in source.
 
-The manager is built with the GhostLock keystore (kept outside Depot at
-`/home/doccstat/data/local/ksu-manager/`); the LKM and a `ksud` embedding it come
-from the fork's `ghostlock-lkm.yml` GitHub workflow. Drop the built `ksud` into
-`ksud/ksud`.
+The committed binaries are historical: official v3.3.0 `ksud` SHA-256
+`8614de6cdc2233c71fd0d1c64381ea10fbe6658651bae9b5a8dab4fe08e6344b` and the older
+manager SHA-256
+`9b53179e06f3d2a9a0a500cd55a597895e43f345b9e83b6067bea982750c89ae`.
+They are **not the updated pair**. CI must refresh them before building, and
+fails rather than use either old binary when publication is missing or invalid.
 
-Bump `ksud/ksud` and this APK together; `InstallViewModel` installs/repairs the
-manager from this asset after the LKM is loaded.
+For a local build, after the fork's signed Build Manager workflow publishes:
 
-## Adding a new target
+```sh
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/root-my-pixel"
+mkdir -p "$cache"
+base=https://github.com/doccstat/KernelSU/releases/download/ghostlock-latest
+curl -fL "$base/GhostLock-manager.apk" -o "$cache/GhostLock-manager.apk" &&
+curl -fL "$base/manager.json" -o "$cache/manager.json" &&
+python3 tools/update_kernel_bundle.py \
+  --apk "$cache/GhostLock-manager.apk" --metadata "$cache/manager.json" \
+  --apksigner "$ANDROID_HOME/build-tools/37.0.0/apksigner" \
+  --aapt2 "$ANDROID_HOME/build-tools/37.0.0/aapt2"
+```
 
-1. Add the target profile to `profiles.json`
-2. Build the exploit .so for that target via the payloads/ Makefile
-3. Copy the .so to `exploits/<profileId>.so`
-4. Set the profile's `kmi` to the target's kernel KMI, so late-load picks the
-   right `kernelsu.ko` out of `ksud/ksud`
+Run from the project root. This explicitly replaces both bundled assets only
+after checking metadata, checksum/size, actual APK package/version, signing
+certificate and the embedded daemon's architecture. No downloaded executable is
+run. A publication race fails the check; retry once publication has finished.
+The separately published `ksud` asset is not used by this workflow.
+
+`BundledManager` reads the APK version rather than a hardcoded version code.
+Manager repair checks the loaded driver's version and UAPI before installation,
+uses user 0, and never uninstalls a differently signed manager automatically.
+Updating a loaded temporary driver requires a full reboot and a fresh RMP root,
+not a soft reboot or a live unload.
+
+## Adding a target
+
+1. Add the exact firmware profile to `profiles.json`.
+2. Build its exploit payload from `Root-My-Pixel-Payloads/` with the Android NDK.
+3. Copy the payload to the profile's `exploits/<profileId>.so` path.
+4. Select the kernel KMI and ensure the matched KernelSU bundle embeds it.

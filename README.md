@@ -24,7 +24,7 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
 
 4. **KernelSU Integration**
    - Staging of the `ksud` binary matching the device's Kernel Module Interface (KMI, e.g., `android15-6.6`).
-   - The app triggers the KernelSU **late-load** mechanism (`ksud late-load --kmi <kmi>`).
+   - Extracts the selected embedded `kernelsu.ko` and loads it with `ksud insmod ... allow_shell=1`, then repairs the platform before replaying module stages.
    - Verifies KernelSU through its UAPI, with `ksud debug info` and `/proc/modules` as compatibility fallbacks.
    - Registers the installed KernelSU Manager only after validating its production APK signature.
 
@@ -70,11 +70,28 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
 
 1. A supported Google Pixel device listed in the table above.
 2. **Shizuku** installed and running via ADB (`adb shell sh /sdcard/Android/data/rikka.shizuku/starter.sh` or Wireless Debugging).
-3. **KernelSU Manager** installed on the device to manage root permissions granted to apps.
+3. The matching **KernelSU Manager** is bundled and installed for user 0. Do not substitute another fork's manager or use its boot-image installer on a locked device.
 
 ---
 
 ## Building from Source
+
+The fork now targets KernelSU upstream `96770dfb807fea61e06819e4cbb438384df54b63`
+(UAPI 6), retaining `com.lixingchi.kernelsu`, the existing signer and display-safe
+Soft Reboot. Yogi `CD1A.260618.001.C3` stays on its stock 6.12.69 kernel and
+`android16-6.12` KMI. This source update is not a device-validation result.
+
+CI fetches one signed manager APK and extracts its embedded `ksud`, including
+the matching LKMs. Missing, stale or invalid release assets fail the build;
+they no longer silently fall back to the historical committed binaries. For a
+local build, first refresh both assets using the commands in
+[`app/src/main/assets/README.md`](app/src/main/assets/README.md).
+
+An existing older loaded driver is not replaced by opening this app. Manager
+repair refuses a version/UAPI mismatch. To adopt the new root stack after its
+artifacts are built, fully reboot and root with the new RMP build; Soft Reboot
+preserves the kernel and both KernelSU/SUSFS LKMs. Never hot-unload KernelSU
+beneath SUSFS.
 
 To compile the entire project (native helper, exploit payloads for all targets, and the final debug APK):
 
@@ -93,7 +110,7 @@ The compiled APK will be generated at:
 
 To install it on a connected device via ADB:
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s <device-serial> install --user 0 -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ⚠️ Keep in mind that the exploit does not have a 100% success rate. Many users have had to try more than 20 times. Many report higher success by opening the app immediately after a reboot, while others find better results 10–40 minutes after rebooting.

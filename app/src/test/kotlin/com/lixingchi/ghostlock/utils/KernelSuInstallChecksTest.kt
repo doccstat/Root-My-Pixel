@@ -24,6 +24,16 @@ class KernelSuInstallChecksTest {
     }
 
     @Test
+    fun `manager repair requires matching driver version and UAPI`() {
+        assertTrue(KernelSuInstallChecks.driverMatchesBundle("version: 32700\nuapi_version: 6\n", 32700L))
+        assertFalse(KernelSuInstallChecks.driverMatchesBundle("version: 32700\nuapi_version: 4\n", 32700L))
+        assertFalse(KernelSuInstallChecks.driverMatchesBundle("version: 32653\nuapi_version: 6\n", 32700L))
+        assertFalse(KernelSuInstallChecks.driverMatchesBundle("version: 32700\nuapi_version: 6\n", null))
+        assertFalse(KernelSuInstallChecks.driverMatchesBundle("version: 32700", 32700L))
+        assertFalse(KernelSuInstallChecks.driverMatchesBundle("Permission denied", 32700L))
+    }
+
+    @Test
     fun `proc modules fallback requires the exact kernelsu module`() {
         assertTrue(
             KernelSuInstallChecks.procModulesShowsActiveKernelSu(
