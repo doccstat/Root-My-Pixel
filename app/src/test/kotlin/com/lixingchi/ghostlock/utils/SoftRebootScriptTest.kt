@@ -87,6 +87,18 @@ class SoftRebootScriptTest {
     }
 
     @Test
+    fun keepsTheLoadedKernelSuDriverAcrossSoftRestarts() {
+        val driverMutation = Regex("\\b(?:unload|rmmod|delete_module|insmod|late-load)\\b")
+        val withRepairs = SoftReboot.buildScript(compatScript = "/data/user/0/x/files/scripts/module_compat.sh")
+        for (candidate in listOf(script, withRepairs)) {
+            assertTrue(
+                "module-stage replay must not unload, replace or reinsert the root driver",
+                !driverMutation.containsMatchIn(candidate),
+            )
+        }
+    }
+
+    @Test
     fun runsTheKsudModuleStagesInBootOrder() {
         val post = script.indexOf("$ksud\" post-fs-data")
         val services = script.indexOf("$ksud\" services")
