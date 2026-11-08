@@ -23,6 +23,8 @@
     <string name="action_close">Close</string>
     <string name="action_done">Done</string>
     <string name="action_soft_reboot">Soft Reboot (Userspace)</string>
+    <string name="soft_reboot_failed">Soft reboot could not start. Export the logs for details.</string>
+    <string name="soft_reboot_update_required">Update KernelSU to a version with coordinated runtime restart support, then try again.</string>
     <string name="action_export_log">Export exploit.log</string>
     <string name="action_copy_log">Copy log</string>
     <string name="action_confirm_unroot">Unroot &amp; Reboot</string>

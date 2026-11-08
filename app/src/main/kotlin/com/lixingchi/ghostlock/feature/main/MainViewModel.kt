@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -291,8 +292,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Restart only the framework and replay KernelSU stages through [SoftReboot].
-     * Keep the display stack running and retain its pending-update/repeat guards.
+     * Request the capability-checked KernelSU runtime restart through [SoftReboot].
+     * The daemon owns module activation and keeps display services running.
      */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -301,8 +302,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val result = runCatching {
                 SoftReboot.launch(app, helper)
-            }.getOrNull()
-            android.util.Log.i("RootMyPixel", "[softReboot] ${result?.output ?: "unavailable"}")
+            }.onFailure { android.util.Log.e("RootMyPixel", "Soft reboot failed", it) }
+                .getOrElse { RootShell.Result(1, app.getString(R.string.soft_reboot_failed)) }
+            android.util.Log.i("RootMyPixel", "[softReboot] ${result.output}")
+            if (!result.isOk) {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(app, result.output.ifBlank {
+                        app.getString(R.string.soft_reboot_failed)
+                    }, Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 

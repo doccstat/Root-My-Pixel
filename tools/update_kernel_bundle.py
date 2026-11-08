@@ -15,6 +15,7 @@ PACKAGE = "com.lixingchi.kernelsu"
 SIGNER = "ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050"
 UPSTREAM = "96770dfb807fea61e06819e4cbb438384df54b63"
 UAPI = 6
+SOFT_REBOOT_CONTRACT = "ksud-framework-restart-v1"
 ASSET = "GhostLock-manager.apk"
 DAEMON = "lib/arm64-v8a/libksud.so"
 
@@ -27,6 +28,7 @@ def update_bundle(apk, metadata, assets, apksigner, aapt2):
         "asset": ASSET,
         "upstreamCommit": UPSTREAM,
         "uapiVersion": UAPI,
+        "softRebootContract": SOFT_REBOOT_CONTRACT,
         "sha256": hashlib.sha256(data).hexdigest(),
         "size": len(data),
     }
@@ -66,6 +68,8 @@ def update_bundle(apk, metadata, assets, apksigner, aapt2):
     if (len(daemon) < 64 or daemon[:6] != b"\x7fELF\x02\x01" or
             struct.unpack_from("<HH", daemon, 16) not in ((2, 183), (3, 183))):
         raise ValueError("Embedded ksud is not an AArch64 ELF64 executable")
+    if SOFT_REBOOT_CONTRACT.encode() not in daemon:
+        raise ValueError("Embedded ksud lacks coordinated runtime restart support")
 
     # All checks precede either replacement; any failure stops the APK build.
     manager = assets / "manager" / ASSET

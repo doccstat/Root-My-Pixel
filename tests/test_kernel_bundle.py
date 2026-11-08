@@ -33,6 +33,7 @@ class KernelBundleTest(unittest.TestCase):
         self.daemon = bytearray(64)
         self.daemon[:6] = b"\x7fELF\x02\x01"
         struct.pack_into("<HH", self.daemon, 16, 3, 183)
+        self.daemon.extend(bundle.SOFT_REBOOT_CONTRACT.encode())
         self.write_apk()
         # Captured with build-tools 37.0.0 against the published version 32711 APK.
         self.certs = (ROOT / "tests/fixtures/apksigner-37.txt").read_text()
@@ -44,7 +45,8 @@ class KernelBundleTest(unittest.TestCase):
             archive.writestr(member, self.daemon)
         self.info = dict(package=bundle.PACKAGE, asset=bundle.ASSET,
                          upstreamCommit=bundle.UPSTREAM, sourceCommit="a" * 40,
-                         uapiVersion=bundle.UAPI, versionCode=32700, versionName="test",
+                         uapiVersion=bundle.UAPI, softRebootContract=bundle.SOFT_REBOOT_CONTRACT,
+                         versionCode=32700, versionName="test",
                          sha256=hashlib.sha256(self.apk.read_bytes()).hexdigest(),
                          size=self.apk.stat().st_size)
         self.write_metadata()
@@ -96,6 +98,7 @@ class KernelBundleTest(unittest.TestCase):
 
     def test_stale_or_mixed_metadata_never_replaces_either_asset(self):
         for key, invalid in (("upstreamCommit", "0" * 40), ("uapiVersion", 4),
+                             ("softRebootContract", "old"),
                              ("sha256", "0" * 64), ("size", 0), ("package", "me.weishu.kernelsu"),
                              ("sourceCommit", "main"), ("versionCode", 1), ("asset", "other.apk")):
             with self.subTest(key=key):
@@ -132,6 +135,13 @@ class KernelBundleTest(unittest.TestCase):
         struct.pack_into("<H", self.daemon, 18, 62)
         self.write_apk()
         with self.assertRaises(ValueError):
+            self.run_update()
+        self.assert_unchanged()
+
+    def test_old_restart_daemon_cannot_enter_a_new_bundle(self):
+        self.daemon = self.daemon[:64]
+        self.write_apk()
+        with self.assertRaisesRegex(ValueError, "coordinated runtime restart"):
             self.run_update()
         self.assert_unchanged()
 

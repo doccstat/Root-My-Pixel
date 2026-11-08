@@ -30,7 +30,7 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
 
 5. **User Interface & Management Tools**
    - Real-time live log progress monitoring.
-   - Handy actions for **Soft Reboot** (restarting `system_server`) and **Log Exporting** for debugging purposes.
+   - **Soft Reboot** applies staged modules through the daemon's coordinated runtime restart, preserving root and display services. **Log Exporting** helps with debugging.
 
 ---
 
@@ -73,6 +73,16 @@ Root My Pixel lets you *temporarily* gain root access with KernelSU in just one 
 3. The matching **KernelSU Manager** is bundled and installed for user 0. Do not substitute another fork's manager or use its boot-image installer on a locked device.
 
 ---
+
+## Soft Reboot diagnostics
+
+Soft Reboot requires a daemon supporting `ksud-framework-restart-v1`; an older
+daemon is reported instead of falling back to a different restart sequence.
+Export its operation-only report from a computer:
+
+```sh
+adb exec-out su -c '/data/adb/ksud soft-reboot --status' > soft-reboot.txt
+```
 
 ## Building from Source
 
