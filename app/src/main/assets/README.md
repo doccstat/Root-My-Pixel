@@ -44,8 +44,11 @@ python3 tools/update_kernel_bundle.py \
 
 Run from the project root. This explicitly replaces both bundled assets only
 after checking metadata, checksum/size, actual APK package/version, signing
-certificate and the embedded daemon's architecture. No downloaded executable is
-run. A publication race fails the check; retry once publication has finished.
+certificate, embedded daemon architecture and `ksud-framework-restart-v1` contract.
+Both the metadata and the embedded executable must advertise that restart contract;
+older signed bundles are rejected rather than shipping an inoperative restart button.
+No downloaded executable is run. A publication race fails the check; retry once
+publication has finished.
 The separately published `ksud` asset is not used by this workflow.
 
 `BundledManager` reads the APK version rather than a hardcoded version code.

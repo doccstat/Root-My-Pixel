@@ -1387,11 +1387,9 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
-     * Apply the platform repairs, then use [SoftReboot]'s guarded framework-only
-     * restart and explicit KernelSU stages. SurfaceFlinger and the composer
-     * remain running; do not delegate to an unverified `ksud soft-reboot` or
-     * restore init's blanket stop/start to create a Vector startup window.
-     * Vector daemon/bridge activation remains a separate validation gate.
+     * Apply platform repairs, then request KernelSU's capability-checked runtime
+     * restart. The daemon holds zygote stopped until module activation finishes;
+     * neither this app nor module services own the display lifecycle.
      */
     fun softReboot() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -1400,7 +1398,7 @@ class InstallViewModel(application: Application) : AndroidViewModel(application)
             applyNetworkFix(helper)
             installDurableStageFixes(helper)
             val result = SoftReboot.launch(app, helper, KSUD_PATH)
-            if (result.code == SoftReboot.REFUSED_EXIT_CODE) {
+            if (!result.isOk) {
                 result.output.trim().lines().forEach { appendLog(it) }
             }
             appendLog("[*] Soft reboot requested (exit ${result.code})")

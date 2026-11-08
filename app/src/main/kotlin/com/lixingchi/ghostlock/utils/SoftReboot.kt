@@ -1,70 +1,14 @@
 package com.lixingchi.ghostlock.utils
 
 import android.content.Context
+import com.lixingchi.ghostlock.R
 import java.io.File
 
-/**
- * A userspace soft reboot that behaves like a reboot without dropping the
- * late-loaded root: module changes, Zygisk injection and Xposed hooks all take
- * effect, and the display comes back lit.
- *
- * The restart is deliberately narrow. Stock `ksud soft-reboot` runs init's
- * blanket `stop`/`start`, which tears the whole display stack down. Our KernelSU
- * fork also uses a framework-only restart, but this app owns its sequence and
- * guards rather than assuming which binary a manager button will execute.
- * Tearing down the display stack leaves the cover panel in a stale DPMS/PSR
- * state - the three-dot cover artifact. Clearing that afterwards is
- * not an option: a composer HAL restart escalates to a RescueParty/recovery
- * boot, and unbinding the panel driver panics the kernel. So the panel is never
- * staled in the first place.
- *
- * 1. `setprop sys.boot_completed 0`, then `killall -9 system_server`. The
- *    runtime restart re-forks `system_server` and restarts `zygote64` (so a
- *    Zygisk/Xposed module installed after the LKM load is re-injected) while
- *    SurfaceFlinger and the composer HAL keep running.
- *
- * 2. The KernelSU module stages then run explicitly, in boot order:
- *    `ksud post-fs-data` while the framework is still down, then
- *    `ksud services` and `ksud boot-completed` once it is back. That is the
- *    part a bare `system_server` restart misses, and why KernelSU ships its own
- *    `soft-reboot`.
- *
- * Deliberately **not** here: init `stop`/`start` (stales the panel), a composer
- * restart (recovery boot), a panel-driver unbind (kernel panic) and
- * `cmd display power-reset` (a no-op on the folded cover panel).
- *
- * Every step kills the framework (and therefore this app), so the work runs in
- * a detached `setsid` shell rather than in the app process.
- */
+/** KernelSU owns runtime quiescence, module activation, recovery and diagnostics. */
 object SoftReboot {
     const val LOG_NAME = "soft-reboot.log"
     const val DEFAULT_KSUD_PATH = "/data/adb/ksud"
-
-    /** Paths the guard below reads to detect a soft reboot already in flight. */
-    const val LOCK_PATH = "/data/adb/soft-reboot.lock"
-
-    /** Refuse a new soft reboot until this many seconds after the last start. */
-    const val MIN_INTERVAL_SECONDS = 90L
-
-    /**
-     * KernelSU stages a freshly installed or updated module here and applies it
-     * in the `post-fs-data` stage of the next boot - including the emulated boot
-     * a soft reboot runs.
-     *
-     * Doing that inside our framework restart is what hard-reset this device on
-     * 2026-09-30: the module swap, the Zygisk re-injection and the restart all
-     * overlapped and the phone died with no panic, tombstone or reason recorded
-     * (the soft-reboot log and lock file were left with unflushed NUL tails).
-     * The update is applied by any boot, so the guard simply refuses to mix the
-     * two: reboot normally, or clear the staged update first.
-     */
-    const val MODULE_UPDATE_DIR = "/data/adb/modules_update"
-
-    /** Marker the script prints instead of restarting when the guard fires. */
-    const val REFUSED_MARKER = "RMP_SOFT_REBOOT_REFUSED:pending-module-update"
-
-    /** Exit code returned when the pending-update guard refuses the reboot. */
-    const val REFUSED_EXIT_CODE = 75
+    const val CONTRACT = "ksud-framework-restart-v1"
 
     fun launch(
         context: Context,
@@ -72,132 +16,31 @@ object SoftReboot {
         ksudPath: String = DEFAULT_KSUD_PATH,
         timeoutSeconds: Long = 10L,
     ): RootShell.Result {
-        val log = File(context.filesDir, LOG_NAME)
-        val pending = pendingModuleUpdates(helper)
-        if (pending.isNotEmpty()) {
-            val refusal = refusalMessage(pending)
-            runCatching { log.appendText(refusal) }
-            return RootShell.Result(REFUSED_EXIT_CODE, refusal.trim())
+        val capability = RootShell.run(
+            "${quote(ksudPath)} soft-reboot --check",
+            helper = helper,
+            timeoutSeconds = timeoutSeconds,
+        )
+        if (!capability.isOk || capability.output.trim() != CONTRACT) {
+            return RootShell.Result(1, context.getString(R.string.soft_reboot_update_required))
         }
-        // Re-stage the platform repairs so this run uses the copy from the
-        // installed app rather than one left on /data/adb by an older build:
-        // an app update can add a repair (the ashmem boot-id node was one) and
-        // a soft reboot has to apply it. It runs before the framework restart,
-        // so no app can come up against stale device nodes.
-        val compat = runCatching {
-            AssetScriptRunner.stage(context, "module_compat.sh").absolutePath
-        }.getOrNull()
-        val command =
-            "setsid sh -c '${buildScript(ksudPath, compat)}' </dev/null >> '${log.absolutePath}' 2>&1 &"
-        return RootShell.run(command, helper = helper, timeoutSeconds = timeoutSeconds)
-    }
-
-    /**
-     * KernelSU module updates staged for the next boot, in module order. An
-     * empty list means the soft reboot can proceed. Runs through the root shell
-     * so the app can report the refusal before anything is restarted.
-     */
-    fun pendingModuleUpdates(helper: File? = null): List<String> {
-        val command =
-            "if [ -d $MODULE_UPDATE_DIR ]; then ls -1 $MODULE_UPDATE_DIR 2>/dev/null; fi"
-        return RootShell.run(command, helper = helper, timeoutSeconds = 10L)
-            .output
-            .lineSequence()
-            .map(String::trim)
-            .filter(String::isNotEmpty)
-            .sorted()
-            .toList()
-    }
-
-    /** Human-readable refusal, also appended to the soft-reboot log. */
-    private fun refusalMessage(pending: List<String>): String = buildString {
-        appendLine()
-        appendLine("[!] soft reboot refused: ${pending.size} KernelSU module update(s) staged")
-        appendLine("[!] a soft reboot applies that update inside the framework restart -")
-        appendLine("[!] the overlap that hard-reset this device on 2026-09-30.")
-        pending.forEach { appendLine("[!]   pending: $it") }
-        appendLine("[!] reboot normally to apply it, then re-run the exploit.")
+        // Keep the existing platform repairs shared by both restart entry points.
+        val compat = runCatching { AssetScriptRunner.stage(context, "module_compat.sh") }
+            .getOrElse { return RootShell.Result(1, context.getString(R.string.soft_reboot_failed)) }
+        // Never fall back to the old kill-and-replay script or stock blanket restart.
+        val result = RootShell.run(buildScript(ksudPath, compat.absolutePath), helper, timeoutSeconds)
+        runCatching { File(context.filesDir, LOG_NAME).appendText(result.output + "\n") }
+        return result
     }
 
     internal fun buildScript(
         ksudPath: String = DEFAULT_KSUD_PATH,
         compatScript: String? = null,
-    ): String {
-        val steps = mutableListOf<String>()
-        steps += "echo \"===== soft reboot start \$(date +%s) =====\""
-        if (compatScript != null) {
-            // No single quotes: the whole script is embedded in `sh -c '...'`.
-            steps += "echo \"[*] step 0: platform repairs before the framework restart\""
-            steps += "sh \"$compatScript\" || echo \"[-] module_compat.sh exited \$?\""
-        }
-        steps += listOf(
-        "echo \"[*] before: boot_completed=\$(getprop sys.boot_completed) reason=\$(getprop sys.boot.reason)\"",
-        "echo \"[*] boot history:\"",
-        "getprop persist.sys.boot.reason.history",
-        "if [ \"\$(getprop sys.boot_completed)\" != \"1\" ]; then",
-        "  echo \"[-] soft reboot: framework is not up, aborting\"",
-        "  exit 1",
-        "fi",
-        "if [ -n \"\$(ls -A $MODULE_UPDATE_DIR 2>/dev/null)\" ]; then",
-        "  echo \"[-] soft reboot: KernelSU module update staged for the next boot:\"",
-        "  ls -1 $MODULE_UPDATE_DIR 2>/dev/null | sed \"s|^|[-]   pending: |\"",
-        "  echo \"[-] soft reboot: REFUSED - applying it inside the framework restart hard-reset this device\"",
-        "  echo \"[-] soft reboot: reboot normally to apply it, then re-run the exploit\"",
-        "  echo $REFUSED_MARKER",
-        "  exit 1",
-        "fi",
-        "now=\$(date +%s)",
-        "last=0",
-        "if [ -f $LOCK_PATH ]; then",
-        "  last=\$(cat $LOCK_PATH 2>/dev/null)",
-        "fi",
-        "case \"\$last\" in *[!0-9]*) last=0 ;; esac",
-        "[ -n \"\$last\" ] || last=0",
-        "if [ \$((now - last)) -lt $MIN_INTERVAL_SECONDS ]; then",
-        "  echo \"[-] soft reboot: another soft reboot started \${last}s ago, aborting\"",
-        "  exit 1",
-        "fi",
-        "echo \"\$now\" > $LOCK_PATH 2>/dev/null || true",
-        // A system_server restart counts as a boot for CrashRecovery's watchdog,
-        // so clear the restart window before and after ours; otherwise the
-        // watchdog rolls back the pending mainline modules and force-reboots.
-        "echo \"[*] step 0: clearing the CrashRecovery restart window\"",
-        CrashRecoveryGuard.clearCommand(),
-        "echo \"[*] step 1: restarting the framework only (zygote + system_server)\"",
-        "setprop sys.boot_completed 0",
-        "killall -9 system_server",
-        "i=0",
-        "while [ \$i -lt 30 ]; do",
-        "  if [ -z \"\$(pidof system_server)\" ]; then break; fi",
-        "  i=\$((i+1))",
-        "  sleep 1",
-        "done",
-        "echo \"[*] system_server down after \${i} ticks\"",
-        "echo \"[*] step 2: KernelSU post-fs-data stage\"",
-        "if [ -x \"$ksudPath\" ]; then",
-        "  \"$ksudPath\" post-fs-data",
-        "  echo \"[*] post-fs-data returned \$?\"",
-        "else",
-        "  echo \"[-] soft reboot: $ksudPath not found, framework restart only\"",
-        "fi",
-        "i=0",
-        "while [ \$i -lt 180 ]; do",
-        "  [ \"\$(getprop sys.boot_completed)\" = \"1\" ] && break",
-        "  i=\$((i+1))",
-        "  sleep 1",
-        "done",
-        "echo \"[*] framework back after \${i}s (reason=\$(getprop sys.boot.reason))\"",
-        "echo \"[*] clearing the CrashRecovery restart window again\"",
-        CrashRecoveryGuard.clearCommand(),
-        "if [ -x \"$ksudPath\" ]; then",
-        "  echo \"[*] step 3: KernelSU services + boot-completed stages\"",
-        "  \"$ksudPath\" services",
-        "  echo \"[*] services returned \$?\"",
-        "  \"$ksudPath\" boot-completed",
-        "  echo \"[*] boot-completed returned \$?\"",
-        "fi",
-        "echo \"===== soft reboot done \$(date +%s) reason=\$(getprop sys.boot.reason) =====\"",
-        )
-        return steps.joinToString("\n")
-    }
+    ): String =
+        "capability=\$(${quote(ksudPath)} soft-reboot --check) && " +
+            "[ \"\$capability\" = ${quote(CONTRACT)} ] && " +
+            (compatScript?.let { "sh ${quote(it)} && " } ?: "") +
+            "${quote(ksudPath)} soft-reboot"
+
+    private fun quote(value: String): String = "'${value.replace("'", "'\\''")}'"
 }
