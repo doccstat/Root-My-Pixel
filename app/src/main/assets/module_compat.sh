@@ -78,22 +78,26 @@ patch_zygisk() {
         echo "RMP_COMPAT_SKIP:zygisksu-absent"
         return 0
     fi
-    if guarded RMP_ZYGISK_GUARD "$script"; then
-        echo "RMP_COMPAT_OK:zygisksu-already"
-        return 0
-    fi
-    backup_once "$script"
+    # Refresh our helper even when the startup script already sources it.
     cat > "$ZYGISK_MOD/rmp-zygisk-guard.sh" <<'GUARD'
 # Root-My-Pixel: leave an already-running Zygisk layer alone.
 for _rmp_p in /proc/[0-9]*/comm; do
     read -r _rmp_c < "$_rmp_p" 2>/dev/null || continue
     case "$_rmp_c" in
-        zygisk-ptrace64|zygisk-ptrace32) exit 0 ;;
+        zygisk-ptrace64|zygisk-ptrace32)
+            grep -q '^State:[[:space:]]*Z' "${_rmp_p%/comm}/status" 2>/dev/null && continue
+            [ ! -d "${_rmp_p%/comm}" ] || exit 0
+            ;;
     esac
 done
 unset _rmp_p _rmp_c
 GUARD
     chmod 644 "$ZYGISK_MOD/rmp-zygisk-guard.sh"
+    if guarded RMP_ZYGISK_GUARD "$script"; then
+        echo "RMP_COMPAT_OK:zygisksu-already"
+        return 0
+    fi
+    backup_once "$script"
     awk -v guard='. "$MODDIR/rmp-zygisk-guard.sh"' '
         !done && index($0, "if [ -d $TMP_PATH ]; then") == 1 {
             print "# RMP_ZYGISK_GUARD"
