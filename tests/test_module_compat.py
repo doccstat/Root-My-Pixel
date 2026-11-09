@@ -1,7 +1,8 @@
-"""Exercise the actual legacy Vector migration with disposable host fixtures."""
+"""Exercise module compatibility repairs with disposable host fixtures."""
 
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -188,6 +189,72 @@ class VectorMigrationTest(unittest.TestCase):
     def test_absent_module_is_a_noop(self):
         self.assertIn("RMP_COMPAT_SKIP:vector-absent", self.migrate())
         self.assertFalse(self.backup.exists())
+
+
+class ZygiskGuardTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="zygisk-compat-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.module = self.root / "modules/zygisksu"
+        self.module.mkdir(parents=True)
+        self.script = self.module / "post-fs-data.sh"
+        self.guard = self.module / "rmp-zygisk-guard.sh"
+        self.proc = self.root / "proc"
+        self.proc.mkdir()
+        self.shell = shlex.split(os.environ.get("RMP_TEST_SHELL", "sh"))
+        self.functions = COMPAT.read_text().split("\nrepair_ashmem\n", 1)[0]
+        self.functions = self.functions.replace("/data/adb", str(self.root))
+        self.functions = self.functions.replace("/proc/", str(self.proc) + "/")
+        self.original = ('#!/bin/sh\nMODDIR=${0%/*}\nTMP_PATH=/unused\n'
+                         'if [ -d $TMP_PATH ]; then\n  :\nfi\necho launched\n')
+
+    def migrate(self):
+        result = subprocess.run(self.shell, input=self.functions + "\npatch_zygisk\n",
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("RMP_COMPAT_FAIL", result.stdout)
+        return result.stdout
+
+    def launch(self):
+        result = subprocess.run(self.shell + [str(self.script)],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_only_live_monitors_preserve_the_runtime(self):
+        self.script.write_text(self.original)
+        self.migrate()
+        self.assertEqual(self.launch(), "launched\n")
+        process = self.proc / "42"
+        process.mkdir()
+        for name in ("zygisk-ptrace64", "zygisk-ptrace32"):
+            (process / "comm").write_text(name + "\n")
+            for state, expected in (("Z", "launched\n"), ("S", ""), ("R", "")):
+                with self.subTest(name=name, state=state):
+                    (process / "status").write_text("State:\t" + state + "\n")
+                    self.assertEqual(self.launch(), expected)
+        (process / "comm").write_text("unrelated\n")
+        self.assertEqual(self.launch(), "launched\n")
+
+    def test_existing_guard_is_upgraded_without_rewriting_startup_or_backup(self):
+        startup = ('#!/bin/sh\nMODDIR=${0%/*}\n# RMP_ZYGISK_GUARD\n'
+                   '. "$MODDIR/rmp-zygisk-guard.sh"\necho custom-startup\n')
+        self.script.write_text(startup)
+        self.guard.write_text("exit 0\n")
+        backup = self.module / "post-fs-data.sh.rmp-orig"
+        backup.write_text("historical startup\n")
+        self.assertIn("RMP_COMPAT_OK:zygisksu-already", self.migrate())
+        self.assertEqual(self.launch(), "custom-startup\n")
+        repaired = self.guard.read_text()
+        self.migrate()
+        self.assertEqual(self.guard.read_text(), repaired)
+        self.assertEqual(self.script.read_text(), startup)
+        self.assertEqual(backup.read_text(), "historical startup\n")
+
+    def test_absent_module_is_a_noop(self):
+        self.assertIn("RMP_COMPAT_SKIP:zygisksu-absent", self.migrate())
+        self.assertFalse(self.guard.exists())
 
 
 if __name__ == "__main__":
