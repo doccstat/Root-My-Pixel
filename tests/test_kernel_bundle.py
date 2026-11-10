@@ -110,6 +110,13 @@ class KernelBundleTest(unittest.TestCase):
                 self.assert_unchanged()
                 self.info[key] = saved
 
+    def test_previous_upstream_bundle_is_rejected_before_asset_replacement(self):
+        self.info["upstreamCommit"] = "96770dfb807fea61e06819e4cbb438384df54b63"
+        self.write_metadata()
+        with self.assertRaisesRegex(ValueError, "metadata mismatch: upstreamCommit"):
+            self.run_update()
+        self.assert_unchanged()
+
     def test_old_publication_explains_the_manager_dependency(self):
         del self.info["upstreamCommit"]
         self.write_metadata()
