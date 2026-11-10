@@ -13,7 +13,7 @@ import zipfile
 
 PACKAGE = "com.lixingchi.kernelsu"
 SIGNER = "ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050"
-UPSTREAM = "96770dfb807fea61e06819e4cbb438384df54b63"
+UPSTREAM = "02ffbd447eb6a2f05d9f46e17b1e1c3bcfdd9971"
 UAPI = 6
 SOFT_REBOOT_CONTRACT = "ksud-framework-restart-v1"
 ASSET = "GhostLock-manager.apk"

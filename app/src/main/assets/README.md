@@ -15,7 +15,7 @@ change that KMI. The upstream exploit payloads and profile feed are unchanged.
   `ksud insmod ... allow_shell=1`; it does not patch a boot partition.
 
 The source integration is upstream
-`96770dfb807fea61e06819e4cbb438384df54b63` / UAPI **6**, with the fork's signer,
+`02ffbd447eb6a2f05d9f46e17b1e1c3bcfdd9971` / UAPI **6**, with the fork's signer,
 package and framework-only restart preserved. Driver `KSU_PACKAGE_NAME` is
 `com.lixingchi.kernelsu`, `KSU_EXPECTED_SIZE=0x034b`, and `KSU_EXPECTED_HASH` is
 `ff8c6f43e0bdd88057103c9faa5d78d7f43ee80a3c1ffa3e20eed06dcb640050` (DER size

@@ -86,7 +86,7 @@ adb exec-out su -c '/data/adb/ksud soft-reboot --status' > soft-reboot.txt
 
 ## Building from Source
 
-The fork now targets KernelSU upstream `96770dfb807fea61e06819e4cbb438384df54b63`
+The fork now targets KernelSU upstream `02ffbd447eb6a2f05d9f46e17b1e1c3bcfdd9971`
 (UAPI 6), retaining `com.lixingchi.kernelsu`, the existing signer and display-safe
 Soft Reboot. Yogi `CD1A.260618.001.C3` stays on its stock 6.12.69 kernel and
 `android16-6.12` KMI. This source update is not a device-validation result.
